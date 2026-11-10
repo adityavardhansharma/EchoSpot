@@ -107,6 +107,10 @@ pub struct App {
     /// Hide when focus leaves; off while a file dialog or a paste owns the moment.
     pub hide_on_blur: bool,
     pub settings: crate::settings::Settings,
+    /// The screen behind the panel, captured as it was summoned.
+    pub backdrop: rune::Pixels,
+    pub has_backdrop: bool,
+    pub was_focused: bool,
 }
 
 impl App {
@@ -135,6 +139,9 @@ impl App {
             visible: false,
             hide_on_blur: true,
             settings: crate::settings::Settings::load(),
+            backdrop: rune::Pixels::new(),
+            has_backdrop: false,
+            was_focused: false,
         };
         app.refresh();
         app
@@ -245,8 +252,15 @@ impl App {
     /// Called as the palette is summoned: note what it covers, then show fresh rows.
     pub fn will_show(&mut self) {
         self.prev_window = windows::active();
+        self.has_backdrop = false;
+        if self.settings.backdrop == "capture"
+            && let Some((w, h, rgba)) = crate::backdrop::capture(self.settings.top_margin) {
+            self.backdrop.set(w, h, rgba);
+            self.has_backdrop = true;
+        }
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
         self.visible = true;
+        self.was_focused = false;
         self.hide_on_blur = true;
         self.refresh();
     }

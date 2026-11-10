@@ -55,7 +55,7 @@ fn entries(app: &App) -> Vec<Entry> {
         if app.usage.hidden.contains(&id) {
             continue;
         }
-        let mut item = Item::new(id.clone(), a.name.clone(), IconSrc::App(a.path.clone())).trailing("Application")
+        let mut item = Item::new(id.clone(), a.name.clone(), a.icon_src()).trailing("Application")
             .action(Action::new("Open Application", &icons::ARROW_UP_RIGHT, Act::Launch(a.path.clone())))
             .action(favorite_action(app, &id))
             .action(Action::new("Copy Name", &icons::COPY, Act::Copy(a.name.clone())).keys("ctrl+shift+c"))
@@ -202,7 +202,7 @@ pub fn windows(app: &App, query: &str) -> Built {
                 None => continue,
             }
         };
-        let icon = entry.map(|a| IconSrc::App(a.path.clone())).unwrap_or(IconSrc::Glyph(&icons::WINDOW));
+        let icon = entry.map(|a| a.icon_src()).unwrap_or(IconSrc::Glyph(&icons::WINDOW));
         let workspace = if c.workspace.name.is_empty() { c.workspace.id.to_string() } else { c.workspace.name.clone() };
         let mut item = Item::new(format!("window:{}", c.address), c.title.clone(), icon).subtitle(app_name)
             .trailing(&format!("Workspace {workspace}"))

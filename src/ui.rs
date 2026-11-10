@@ -48,8 +48,8 @@ pub fn icon_slot(s: &App, p: &Palette, scale: f32, src: &IconSrc, slot: f32) -> 
         IconSrc::None => el().size(slot, slot),
         IconSrc::Glyph(g) => glyph_tile(p, g, slot, None),
         IconSrc::Tinted(g, c) => glyph_tile(p, g, slot, Some(*c)),
-        IconSrc::App(path) => match s.icons.app(path, slot, scale) {
-            Some(px) => el().size(slot, slot).pixels(&px),
+        IconSrc::App(path) => match s.icons.file(path, slot, scale) {
+            Some(px) => el().size(slot, slot).pixels_fit(&px, SurfaceFit::Fit),
             None => glyph_tile(p, &icons::BOX, slot, None),
         },
         IconSrc::File(path) => match s.icons.file(path, slot, scale) {
@@ -113,7 +113,7 @@ fn result_row(s: &App, p: &Palette, scale: f32, item: &Item, index: usize, selec
 fn lead_card(p: &Palette, item: &Item, card: &Card, index: usize, selected: bool) -> El {
     let column = |value: &str, badge: &str| {
         col().grow(1.0).center().gap(space::MD)
-            .child(text(value.to_string()).font(type_::CALC_RESULT).color(p.text).truncate())
+            .child(text(value.to_string()).font(type_::CALC_RESULT).color(p.text.alpha(0.96)).truncate())
             .child(row().px(space::SM).py(space::XXS).radius(radius::KEY_CAP).fill(p.control_surface)
                 .child(text(badge.to_string()).font(type_::KEY_CAP).color(p.text_secondary)))
     };
@@ -540,14 +540,32 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (None, Layout::Split) => split_body(s, &p, scale, screen),
         (None, Layout::Grid { columns }) => grid_body(&p, screen, columns),
     };
-    let mut root = el().key("panel").w_full().h_full().fill(p.panel_scrim).clip_rounded(radius::PANEL)
-        .child(body).child(header(s, &p, screen)).child(bottom_bar(s, &p, screen));
+    let mut panel = el().key("panel").absolute(size::WINDOW_MARGIN, size::WINDOW_MARGIN).size(size::PANEL_W, size::PANEL_H)
+        .radius(radius::PANEL).clip_rounded(radius::PANEL)
+        .shadow(16.0, 48.0, Color::BLACK.alpha(if p.dark { 0.42 } else { 0.24 }))
+        .box_shadow(rune::Shadow::core_animation(0.0, 0.0, 0.5, Color::BLACK.alpha(0.55)));
+    // The surface: the screen behind the panel, blurred, under the scrim.
+    match (s.has_backdrop, s.settings.backdrop.as_str()) {
+        (true, _) => {
+            let bleed = crate::backdrop::BLEED;
+            panel = panel.child(el().absolute(-bleed, -bleed).size(size::PANEL_W + bleed * 2.0, size::PANEL_H + bleed * 2.0)
+                .pixels(&s.backdrop).blur(26.0).inert())
+                .child(el().pin(FULL, FULL, FULL, FULL).fill(p.panel_scrim).inert());
+        }
+        (false, "compositor") => panel = panel.fill(p.panel_scrim),
+        _ => panel = panel.fill(if p.dark { rune::color::hex("#1b1b1d").unwrap_or(Color::BLACK).alpha(0.94) } else { Color::WHITE.alpha(0.94) }),
+    }
+    panel = panel.child(body).child(header(s, &p, screen)).child(bottom_bar(s, &p, screen));
     if let Some(menu) = &s.menu {
-        root = root.child(menu_view(s, &p, menu));
+        panel = panel.child(menu_view(s, &p, menu));
     }
     if let Some(dialog) = &s.dialog {
-        root = root.child(dialog_view(s, &p, dialog));
+        panel = panel.child(dialog_view(s, &p, dialog));
     }
     // The rim Liquid Glass lights along the panel's top edge, fading around its corners.
-    root.child(el().pin(FULL, FULL, FULL, FULL).radius(radius::PANEL).border_gradient(1.0, p.panel_rim_top, p.panel_rim_bottom).inert())
+    panel = panel.child(el().pin(FULL, FULL, FULL, FULL).radius(radius::PANEL).border_gradient(1.0, p.panel_rim_top, p.panel_rim_bottom).inert());
+    // The window is larger than the panel so the shadow has room; a press out there dismisses.
+    el().w_full().h_full()
+        .child(el().key("outside").pin(FULL, FULL, FULL, FULL).hit().on_press_tx(|s: &mut App, tx| s.hide(tx)))
+        .child(panel)
 }

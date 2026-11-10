@@ -5,6 +5,7 @@ pub mod emoji;
 pub mod files;
 pub mod forms;
 pub mod fuzzy;
+pub mod icon_theme;
 pub mod quicklinks;
 pub mod root;
 pub mod snippets;

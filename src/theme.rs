@@ -39,6 +39,10 @@ pub mod radius {
 pub mod size {
     pub const PANEL_W: f32 = 750.0;
     pub const PANEL_H: f32 = 475.0;
+    /// Clear space around the panel inside its window, where the panel's shadow falls.
+    pub const WINDOW_MARGIN: f32 = 44.0;
+    pub const WINDOW_W: f32 = PANEL_W + WINDOW_MARGIN * 2.0;
+    pub const WINDOW_H: f32 = PANEL_H + WINDOW_MARGIN * 2.0;
     pub const HEADER_H: f32 = 36.0;
     pub const HEADER_ICON_SLOT: f32 = 22.0;
     pub const HEADER_PAD: f32 = 10.0;
@@ -168,7 +172,7 @@ pub mod type_ {
     /// `.headline`
     pub const PANEL_TITLE: TextStyle = s(13.0, 650.0, 18.0);
     /// `.title`
-    pub const CALC_RESULT: TextStyle = s(22.0, 500.0, 28.0);
+    pub const CALC_RESULT: TextStyle = s(22.0, 450.0, 28.0);
     /// `.caption`
     pub const KEY_CAP: TextStyle = s(10.0, 500.0, 13.0);
     /// `.callout.medium`

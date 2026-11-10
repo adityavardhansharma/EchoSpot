@@ -18,11 +18,15 @@ pub struct Settings {
     /// Fraction of the screen's height above the palette.
     pub top_margin: f32,
     pub animations: bool,
+    /// What the panel's surface is made of: "capture" blurs a capture of the screen behind it
+    /// (works with Hyprland's blur off, Omarchy's default); "compositor" leaves the panel
+    /// translucent for Hyprland's own blur; "none" draws it nearly opaque.
+    pub backdrop: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into() }
     }
 }
 

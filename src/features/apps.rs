@@ -15,6 +15,9 @@ pub struct AppEntry {
     pub terminal: bool,
     /// The window class the app's windows report, for the running dot.
     pub wm_class: String,
+    /// The `Icon=` value, and the file it resolved to.
+    pub icon_name: String,
+    pub icon: Option<PathBuf>,
 }
 
 fn data_dirs() -> Vec<PathBuf> {
@@ -78,6 +81,8 @@ fn parse(path: &Path, id: String, locales: &[String]) -> Option<AppEntry> {
         exec,
         terminal: flag("Terminal"),
         wm_class,
+        icon_name: fields.get("Icon").unwrap_or(&"").to_string(),
+        icon: None,
     })
 }
 
@@ -102,7 +107,7 @@ fn collect(dir: &Path, base: &Path, locales: &[String], seen: &mut HashMap<Strin
                 None => {
                     seen.insert(id.clone(), AppEntry {
                         id, path, name: String::new(), generic: String::new(), keywords: String::new(),
-                        exec: String::new(), terminal: false, wm_class: String::new(),
+                        exec: String::new(), terminal: false, wm_class: String::new(), icon_name: String::new(), icon: None,
                     });
                 }
             }
@@ -121,6 +126,10 @@ pub fn scan() -> Vec<AppEntry> {
     let mut apps: Vec<AppEntry> = order.into_iter().filter_map(|id| seen.remove(&id)).filter(|a| !a.name.is_empty()).collect();
     apps.sort_by_key(|a| a.name.to_lowercase());
     apps.dedup_by(|a, b| a.name == b.name && a.exec == b.exec);
+    let index = super::icon_theme::IconIndex::build();
+    for app in &mut apps {
+        app.icon = index.find(&app.icon_name);
+    }
     apps
 }
 
@@ -156,6 +165,16 @@ pub fn exec_argv(exec: &str) -> Vec<String> {
         args.push(cur);
     }
     args
+}
+
+impl AppEntry {
+    /// The row icon: the app's own, or the generic tile.
+    pub fn icon_src(&self) -> crate::model::IconSrc {
+        match &self.icon {
+            Some(path) => crate::model::IconSrc::App(path.clone()),
+            None => crate::model::IconSrc::Glyph(&crate::icons::BOX),
+        }
+    }
 }
 
 pub fn launch(app: &AppEntry) {

@@ -4,6 +4,7 @@
 //! key in Hyprland) talks to it over a socket, and starts it when it isn't running.
 
 mod app;
+mod backdrop;
 mod ext;
 mod features;
 mod hud;
@@ -51,8 +52,14 @@ fn on_key(s: &mut App, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
 }
 
 fn on_focus(s: &mut App, focused: bool, tx: &mut Tx) {
-    if !focused && s.visible && s.hide_on_blur && s.settings.hide_on_blur {
+    // A new Wayland window hears "unfocused" before its first focus; only a real loss hides.
+    if focused {
+        s.was_focused = true;
+    } else if s.was_focused && s.visible && s.hide_on_blur && s.settings.hide_on_blur {
         s.hide(tx);
+    }
+    if std::env::var_os("ECHOSPOT_DEBUG").is_some() {
+        eprintln!("focus {focused} visible {}", s.visible);
     }
 }
 
@@ -83,7 +90,7 @@ fn main() {
         poll: Some(poll),
         on_key: Some(on_key),
         min_size: Some((0.0, 0.0)),
-        ..AppSpec::new("EchoSpot", (theme::size::PANEL_W, theme::size::PANEL_H), App::new, ui::view)
+        ..AppSpec::new("EchoSpot", (theme::size::WINDOW_W, theme::size::WINDOW_H), App::new, ui::view)
     };
     let options = WindowOptions {
         transparent: true, borderless: true, resizable: false, visible: !headless && show_now,

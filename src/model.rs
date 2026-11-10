@@ -14,7 +14,7 @@ pub enum IconSrc {
     Glyph(&'static Icon),
     /// A glyph on a tinted tile (an extension's own colour).
     Tinted(&'static Icon, Color),
-    /// A `.desktop` entry, drawn with its theme icon.
+    /// An application's icon file, drawn whole.
     App(PathBuf),
     /// An image file: a thumbnail, an extension's asset.
     File(PathBuf),
