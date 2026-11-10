@@ -111,7 +111,7 @@ pub struct Palette {
 }
 
 fn rgb(hex: u32, a: f32) -> Color {
-    let c = rune::hex(&format!("#{hex:06x}")).unwrap_or(Color::WHITE);
+    let c = rune::color::hex(&format!("#{hex:06x}")).unwrap_or(Color::WHITE);
     c.alpha(a)
 }
 
