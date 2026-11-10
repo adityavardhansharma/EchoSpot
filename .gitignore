@@ -1,0 +1,5 @@
+/target
+/runtime/node_modules
+/runtime/dist
+*.png.tmp
+.claude/
