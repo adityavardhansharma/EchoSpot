@@ -160,6 +160,47 @@ pub fn palette(dark: bool) -> Palette {
     }
 }
 
+/// The colours a command's tile comes in. Each is a pair, lighter above deeper, so a tile reads
+/// as a lit object rather than a flat swatch; what a command does picks its family.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tint {
+    Violet,
+    Indigo,
+    Blue,
+    Cyan,
+    Teal,
+    Green,
+    Yellow,
+    Orange,
+    Red,
+    Pink,
+    Graphite,
+}
+
+impl Tint {
+    /// `(top, bottom)` of the tile's gradient.
+    pub fn stops(self) -> (Color, Color) {
+        let (top, bottom) = match self {
+            Tint::Violet => (0x9d7dff, 0x6a3df0),
+            Tint::Indigo => (0x7c88ff, 0x4a4fe4),
+            Tint::Blue => (0x4daaff, 0x0b6bf0),
+            Tint::Cyan => (0x4fd0f7, 0x0a94d8),
+            Tint::Teal => (0x41d6c4, 0x0c9c93),
+            Tint::Green => (0x55dd7c, 0x1fa648),
+            Tint::Yellow => (0xffd54d, 0xf2a600),
+            Tint::Orange => (0xffaf4d, 0xf47600),
+            Tint::Red => (0xff7b70, 0xe5352b),
+            Tint::Pink => (0xff7dba, 0xe5317e),
+            Tint::Graphite => (0x90909b, 0x56565f),
+        };
+        (rgb(top, 1.0), rgb(bottom, 1.0))
+    }
+    /// The one colour that stands for the family: an accent, a status dot.
+    pub fn accent(self) -> Color {
+        self.stops().1
+    }
+}
+
 /// Type. The sizes are macOS's text styles, which Tinycast uses by name.
 pub mod type_ {
     use super::TextStyle;

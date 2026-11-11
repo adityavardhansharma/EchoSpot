@@ -43,11 +43,37 @@ fn glyph_tile(p: &Palette, glyph: &'static rune::Icon, slot: f32, tint: Option<C
     el().size(slot, slot).center().child(face)
 }
 
+/// A command's own tile: its glyph in white on the family colour, lit from above.
+pub fn badge_tile(glyph: &'static rune::Icon, slot: f32, tint: theme::Tint) -> El {
+    let tile = slot - 3.0;
+    let (top, bottom) = tint.stops();
+    let face = el().size(tile, tile).radius(tile * 0.28).center().fill(bottom).gradient(top, bottom)
+        .border_gradient(1.0, Color::WHITE.alpha(0.42), Color::WHITE.alpha(0.05))
+        .shadow(1.0, 3.0, bottom.alpha(0.38))
+        .child(icon(glyph, (tile * 0.62).round()).color(Color::WHITE));
+    el().size(slot, slot).center().child(face)
+}
+
+/// A site's icon on a light plate: most favicons are drawn for a white tab strip.
+fn favicon_tile(px: &rune::Pixels, slot: f32) -> El {
+    let tile = slot - 3.0;
+    let inset = (tile * 0.16).round();
+    let face = el().size(tile, tile).radius(tile * 0.28).center().fill(Color::WHITE.alpha(0.96))
+        .shadow(1.0, 3.0, Color::BLACK.alpha(0.22))
+        .child(el().size(tile - inset * 2.0, tile - inset * 2.0).radius(2.0).pixels_fit(px, SurfaceFit::Fit));
+    el().size(slot, slot).center().child(face)
+}
+
 pub fn icon_slot(s: &App, p: &Palette, scale: f32, src: &IconSrc, slot: f32) -> El {
     match src {
         IconSrc::None => el().size(slot, slot),
         IconSrc::Glyph(g) => glyph_tile(p, g, slot, None),
         IconSrc::Tinted(g, c) => glyph_tile(p, g, slot, Some(*c)),
+        IconSrc::Badge(g, tint) => badge_tile(g, slot, *tint),
+        IconSrc::Favicon(path) => match s.icons.file(path, slot, scale) {
+            Some(px) => favicon_tile(&px, slot),
+            None => glyph_tile(p, &icons::LINK, slot, None),
+        },
         IconSrc::App(path) => match s.icons.file(path, slot, scale) {
             Some(px) => el().size(slot, slot).pixels_fit(&px, SurfaceFit::Fit),
             None => glyph_tile(p, &icons::BOX, slot, None),

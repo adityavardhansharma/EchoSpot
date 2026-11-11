@@ -84,7 +84,7 @@ pub fn host(link: &str) -> Option<&str> {
 /// that are not web pages.
 pub fn icon(link: &str) -> IconSrc {
     match host(link).and_then(crate::ext::net::favicon) {
-        Some(path) => IconSrc::File(path),
+        Some(path) => IconSrc::Favicon(path),
         None => IconSrc::Glyph(&icons::LINK),
     }
 }

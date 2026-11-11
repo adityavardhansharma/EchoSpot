@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use rune::{Color, Icon, Key, KeyEvent};
 
 use crate::icons;
+use crate::theme::Tint;
 
 #[derive(Clone, Debug)]
 pub enum IconSrc {
@@ -14,6 +15,10 @@ pub enum IconSrc {
     Glyph(&'static Icon),
     /// A glyph on a tinted tile (an extension's own colour).
     Tinted(&'static Icon, Color),
+    /// A white glyph on one of the palette's own colour tiles: EchoSpot's commands.
+    Badge(&'static Icon, Tint),
+    /// A site's icon, on the light plate that keeps a dark mark readable.
+    Favicon(PathBuf),
     /// An application's icon file, drawn whole.
     App(PathBuf),
     /// An image file: a thumbnail, an extension's asset.
