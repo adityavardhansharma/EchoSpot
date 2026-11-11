@@ -389,6 +389,40 @@ impl Chat {
     }
 }
 
+/// Asks the provider for its model list: proof the key and endpoint work, at no token cost.
+/// Blocking; returns how many models answered.
+pub fn probe(settings: &AiSettings) -> Result<usize, String> {
+    if !settings.ready() {
+        return Err("No API key yet.".into());
+    }
+    let anthropic = settings.provider == "anthropic";
+    let url = if anthropic { "https://api.anthropic.com/v1/models".to_string() } else { format!("{}/models", settings.base_url.trim_end_matches('/')) };
+    let mut config = format!("url = \"{url}\"\n");
+    let mut header = |h: String| config.push_str(&format!("header = \"{}\"\n", h.replace('\\', "\\\\").replace('"', "\\\"")));
+    if anthropic {
+        header(format!("x-api-key: {}", settings.key()));
+        header("anthropic-version: 2023-06-01".into());
+    } else if !settings.key().is_empty() {
+        header(format!("Authorization: Bearer {}", settings.key()));
+    }
+    // The key goes through curl's stdin config, so it never shows in the process list.
+    let mut child = Command::new("curl").args(["-sS", "--max-time", "12", "-K", "-"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|_| "curl is needed to reach the model.".to_string())?;
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(config.as_bytes());
+    }
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    if !out.status.success() {
+        let reason = String::from_utf8_lossy(&out.stderr);
+        return Err(util::truncate(reason.trim().trim_start_matches("curl: ").trim(), 90));
+    }
+    let body: Value = serde_json::from_slice(&out.stdout).map_err(|_| "The endpoint did not answer with JSON.".to_string())?;
+    if let Some(error) = body.get("error") {
+        return Err(util::truncate(error.get("message").and_then(Value::as_str).or(error.as_str()).unwrap_or("The provider refused the request."), 90));
+    }
+    Ok(body.get("data").and_then(Value::as_array).map(Vec::len).unwrap_or(0))
+}
+
 /// Text to act on: what is selected in the app behind the palette, else the clipboard.
 pub fn selection() -> String {
     let primary = util::output("wl-paste", &["--primary", "--no-newline"]).unwrap_or_default();
