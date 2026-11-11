@@ -207,6 +207,9 @@ impl App {
         if self.top().route == Route::Clipboard {
             self.clipboard.reload();
         }
+        if self.top().route == Route::Ai {
+            self.top_mut().filter = features::ai::model_filter(&self.settings.ai).1;
+        }
         self.refresh();
         tx.instant();
     }
@@ -409,8 +412,10 @@ impl App {
         match menu.kind {
             MenuKind::Filter => {
                 self.top_mut().filter = index;
-                if let Route::Ext(id) = self.top().route {
-                    crate::ext::filter_changed(self, id, index);
+                match self.top().route {
+                    Route::Ext(id) => crate::ext::filter_changed(self, id, index),
+                    Route::Ai => features::ai::set_model(self, index),
+                    _ => {}
                 }
                 self.refresh();
             }

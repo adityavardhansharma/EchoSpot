@@ -110,6 +110,13 @@ pub enum AiOp {
     Quick(String),
     /// Open the chat, asking this first when it isn't empty.
     Open(String),
+    /// Ask the last question again.
+    Retry,
+    /// Pick a saved conversation back up, by id.
+    Resume(u64),
+    DeleteChat(u64),
+    /// Turn a Quick AI answer into a chat that takes follow-ups.
+    Continue,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

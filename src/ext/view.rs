@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use rune::{Color, El, ScrollSpec, Tx, col, el, row, spacer, text};
-use rune_kit::markdown::{Markdown, MarkdownStyle};
+use rune_kit::markdown::Markdown;
 use serde_json::Value;
 
 use crate::app::{App, Built};
@@ -169,7 +169,7 @@ pub fn build(app: &App, session: u64, query: &str) -> Built {
 }
 
 pub fn markdown(p: &Palette, source: &str) -> El {
-    Markdown::new(source.to_string()).selectable(false).render(&MarkdownStyle::neutral(p.dark))
+    Markdown::new(source.to_string()).selectable(false).render(&crate::ui::markdown_style(p))
 }
 
 /// A Detail view's page: Markdown, with its metadata in a column beside it.

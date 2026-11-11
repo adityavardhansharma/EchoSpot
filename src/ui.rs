@@ -64,6 +64,19 @@ fn favicon_tile(px: &rune::Pixels, slot: f32) -> El {
     el().size(slot, slot).center().child(face)
 }
 
+/// Markdown set in the palette's own type: an answer, an extension's page, a store listing.
+pub fn markdown_style(p: &Palette) -> rune_kit::markdown::MarkdownStyle {
+    rune_kit::markdown::MarkdownStyle::neutral(p.dark)
+        .text(p.text.alpha(0.92)).muted(p.text_secondary).link(p.primary_action)
+        .inline_code_bg(p.control_surface).code_block(p.card_fill, p.card_stroke).code_block_padding(space::XL, space::LG)
+        .body_font(TextStyle::new(13.0, 400.0).lh(20.0))
+        .heading_font(1, TextStyle::new(17.0, 650.0).lh(24.0))
+        .heading_font(2, TextStyle::new(15.0, 620.0).lh(22.0))
+        .heading_font(3, TextStyle::new(13.0, 650.0).lh(20.0))
+        .code_block_font(TextStyle::new(12.0, 400.0).lh(18.0).mono())
+        .rule(p.separator).quote_rule(p.border).list(18.0, 4.0)
+}
+
 pub fn icon_slot(s: &App, p: &Palette, scale: f32, src: &IconSrc, slot: f32) -> El {
     match src {
         IconSrc::None => el().size(slot, slot),
@@ -409,7 +422,8 @@ fn header(s: &App, p: &Palette, screen: &Screen) -> El {
         bar = bar.child(row().key("filter").h(size::BAR_BUTTON_H).px(space::MD).gap(space::SM).center_y().radius(radius::BAR_CONTROL)
             .hover(p.row_hover).press(p.control_surface)
             .on_press(|s: &mut App| s.open_filter_menu())
-            .child(icon(if matches!(screen.layout, Layout::Grid { .. }) { &icons::GRID } else { &icons::LIST }, 14.0).color(p.text_secondary))
+            .child(icon(if screen.route == Route::Ai { &icons::AI } else if matches!(screen.layout, Layout::Grid { .. }) { &icons::GRID } else { &icons::LIST }, 14.0)
+                .color(if screen.route == Route::Ai { theme::Tint::Violet.stops().0 } else { p.text_secondary }))
             .child(text(name).font(type_::BAR).color(p.text.alpha(0.9)))
             .child(icon(&icons::CHEVRON_DOWN, 11.0).color(p.text_secondary)));
     }
@@ -599,7 +613,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (Some(form), _) => form_body(&p, form),
         (None, Layout::List) => match &screen.route {
             Route::Ext(id) => crate::ext::view::body(s, &p, scale, *id).unwrap_or_else(|| list_body(s, &p, scale, screen)),
-            Route::Ai => crate::features::ai::body(s, &p),
+            Route::Ai if !s.chat.messages.is_empty() => crate::features::ai::body(s, &p),
             _ => list_body(s, &p, scale, screen),
         },
         (None, Layout::Split) => split_body(s, &p, scale, screen),
