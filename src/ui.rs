@@ -29,7 +29,7 @@ pub fn keycap(p: &Palette, label: &str, outline: bool) -> El {
     })
 }
 
-fn keycaps_row(p: &Palette, keys: &str, outline: bool) -> El {
+pub fn keycaps_row(p: &Palette, keys: &str, outline: bool) -> El {
     row().gap(space::XXS).center_y().children(keycaps(keys).iter().map(|k| keycap(p, k, outline)))
 }
 
