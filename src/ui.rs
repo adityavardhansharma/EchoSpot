@@ -2,7 +2,7 @@
 //! header and bottom bar float over the list as transparent overlays, rows dissolve beneath
 //! them, and only the floating controls are glass.
 
-use rune::{Color, Cx, El, ScrollSpec, SurfaceFit, TextStyle, Transition, col, el, icon, row, spacer, text, text_input};
+use rune::{Color, Cx, El, ScrollFade, ScrollSpec, SurfaceFit, TextStyle, Transition, col, el, icon, row, spacer, text, text_input};
 
 use crate::app::{App, Menu, MenuKind, Screen};
 use crate::features::forms::{self, FieldKind, Form};
@@ -136,14 +136,19 @@ fn empty_state(p: &Palette, screen: &Screen) -> El {
 }
 
 /// A palette list's scroll viewport: it fills the panel and dissolves under the bars.
+/// A palette list's scroll viewport. It runs under the bottom bar, where rows dissolve over a
+/// long band, but stops short of the header: a row leaving the top fades out within a few points
+/// of the search field instead of sliding through its text.
 fn list_viewport(content: El) -> El {
-    col().key("list").w_full().h_full().scroll(ScrollSpec { stick_bottom: false })
-        .scroll_edge_fade(size::DISSOLVE_BOTTOM).scroll_margin(size::BOTTOM_BAR_H + space::SM)
-        .child(content)
+    let fade = ScrollFade::strength(size::DISSOLVE_TOP).full_at(4.0).with_end(ScrollFade::strength(size::DISSOLVE_BOTTOM));
+    col().w_full().h_full().pt(size::LIST_CLIP_TOP).child(
+        col().key("list").w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false })
+            .scroll_fade(fade).scroll_margin(size::BOTTOM_BAR_H + space::SM)
+            .child(content))
 }
 
 fn list_rows(s: &App, p: &Palette, scale: f32, screen: &Screen, compact: bool) -> El {
-    let mut content = col().w_full().px(space::MD).pt(size::HEADER_BAND).pb(size::BOTTOM_BAR_H + space::SM);
+    let mut content = col().w_full().px(space::MD).pt(size::LIST_TOP_PAD).pb(size::BOTTOM_BAR_H + space::SM);
     for r in &screen.rows {
         content = content.child(match r {
             Row::Header { title, count, first } => section_header(p, title, *count, *first),
@@ -225,7 +230,7 @@ fn grid_body(s: &App, p: &Palette, scale: f32, screen: &Screen, columns: usize) 
     }
     let gap = space::MD;
     let cell = ((size::PANEL_W - size::EMOJI_GRID_INSET * 2.0 - gap * (columns as f32 - 1.0)) / columns as f32).floor();
-    let mut content = col().w_full().px(size::EMOJI_GRID_INSET).pt(size::HEADER_BAND).pb(size::BOTTOM_BAR_H + space::SM);
+    let mut content = col().w_full().px(size::EMOJI_GRID_INSET).pt(size::LIST_TOP_PAD).pb(size::BOTTOM_BAR_H + space::SM);
     let mut line: Vec<El> = Vec::new();
     let flush = |content: El, line: &mut Vec<El>| {
         if line.is_empty() { content } else { content.child(row().w_full().gap(gap).pb(gap).children(line.drain(..))) }
@@ -329,7 +334,7 @@ fn form_field(p: &Palette, form: &Form, index: usize) -> El {
 }
 
 fn form_body(p: &Palette, form: &Form) -> El {
-    let content = col().w_full().px(space::XXL + space::XL).pr(72.0).pt(size::HEADER_BAND + space::MD).pb(size::BOTTOM_BAR_H + space::XL).gap(space::XL)
+    let content = col().w_full().px(space::XXL + space::XL).pr(72.0).pt(size::LIST_TOP_PAD + space::MD).pb(size::BOTTOM_BAR_H + space::XL).gap(space::XL)
         .children((0..form.fields.len()).map(|i| form_field(p, form, i)));
     el().pin(FULL, FULL, FULL, FULL).child(list_viewport(content))
 }

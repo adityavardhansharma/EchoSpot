@@ -72,7 +72,11 @@ pub mod size {
     pub const HUD_MAX_W: f32 = 420.0;
     pub const HAIRLINE: f32 = 1.0;
     /// Fade bands of the edge dissolve: each overshoots its bar into the list.
-    pub const DISSOLVE_TOP: f32 = HEADER_H + HEADER_PAD + 32.0;
+    pub const DISSOLVE_TOP: f32 = 14.0;
+    /// Where a list's viewport starts: just under the search text, so a row scrolling up is gone
+    /// before it could cross the field. The content pads the rest of the way to the band.
+    pub const LIST_CLIP_TOP: f32 = HEADER_BAND - LIST_TOP_PAD;
+    pub const LIST_TOP_PAD: f32 = 10.0;
     pub const DISSOLVE_BOTTOM: f32 = BOTTOM_BAR_H + 28.0;
 }
 
