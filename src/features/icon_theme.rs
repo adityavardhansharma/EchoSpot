@@ -87,7 +87,14 @@ impl IconIndex {
                     let Ok(categories) = std::fs::read_dir(size.path()) else { continue };
                     for category in categories.flatten() {
                         let cat_name = category.file_name().to_string_lossy().to_string();
-                        let score = if score == 0 { dir_score(&cat_name) } else { score };
+                        let (size_score, kind) = if score == 0 { (dir_score(&cat_name), size_name.as_str()) } else { (score, cat_name.as_str()) };
+                        // An application's own artwork outranks a same-named status or action glyph.
+                        let score = size_score + match kind {
+                            "apps" => 10_000,
+                            "devices" | "places" | "categories" | "mimetypes" | "preferences" => 4_000,
+                            "panel" | "status" | "actions" | "legacy" | "ui" | "emblems" => 0,
+                            _ => 2_000,
+                        };
                         let Ok(files) = std::fs::read_dir(category.path()) else { continue };
                         for file in files.flatten() {
                             let path = file.path();
@@ -126,12 +133,19 @@ impl IconIndex {
         if icon.is_empty() {
             return None;
         }
+        if let Some(rest) = icon.strip_prefix("~/") {
+            let path = util::home().join(rest);
+            return path.is_file().then_some(path);
+        }
         if icon.starts_with('/') {
             return Path::new(icon).is_file().then(|| PathBuf::from(icon));
         }
         // Some entries name the file with its extension.
         let name = icon.strip_suffix(".png").or_else(|| icon.strip_suffix(".svg")).unwrap_or(icon);
-        self.themes.iter().find_map(|t| t.get(name).map(|(_, p)| p.clone()))
+        // An app icon anywhere in the chain beats a generic glyph in the first theme: a web app
+        // called "zoom" must not draw the theme's magnifier.
+        self.themes.iter().find_map(|t| t.get(name).filter(|(score, _)| *score >= 10_000).map(|(_, p)| p.clone()))
+            .or_else(|| self.themes.iter().find_map(|t| t.get(name).map(|(_, p)| p.clone())))
             .or_else(|| self.loose.get(name).filter(|p| p.extension().is_none_or(|e| e != "xpm")).cloned())
     }
 }

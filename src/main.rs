@@ -74,6 +74,12 @@ fn main() {
                 return;
             }
         }
+        "debug-icons" => {
+            for app in features::apps::scan() {
+                println!("{:<30} {:<36} {}", app.name, app.icon_name, app.icon.map(|p| p.display().to_string()).unwrap_or_else(|| "MISSING".into()));
+            }
+            return;
+        }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
             return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks>\n  echospot quit");
