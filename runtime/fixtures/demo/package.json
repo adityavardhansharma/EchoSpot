@@ -1,0 +1,16 @@
+{
+  "name": "echospot-demo",
+  "title": "EchoSpot Demo",
+  "description": "A fixture extension that exercises the runtime: list, detail, form and a no-view command.",
+  "icon": "icon.png",
+  "author": "echospot",
+  "commands": [
+    { "name": "fruits", "title": "Browse Fruits", "description": "A list with sections, a detail pane and actions.", "mode": "view" },
+    { "name": "about", "title": "Read About", "description": "A Markdown detail view with metadata.", "mode": "view" },
+    { "name": "feedback", "title": "Send Feedback", "description": "A form with every common field.", "mode": "view" },
+    { "name": "stamp", "title": "Copy Timestamp", "description": "Copies the current time and reports it.", "mode": "no-view" }
+  ],
+  "preferences": [
+    { "name": "greeting", "title": "Greeting", "description": "Shown above the fruit list.", "type": "textfield", "required": false, "default": "Fruit" }
+  ]
+}

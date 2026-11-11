@@ -13,7 +13,7 @@ path = "src/main.rs"
 # Rune is pre-release; this follows the local checkout of its `dev` branch.
 # To build elsewhere: rune = { git = "https://github.com/anomalyco/rune", rev = "<dev rev>" }
 rune = { path = "../rune/crates/rune" }
-rune-kit = { path = "../rune/crates/rune-kit" }
+rune-kit = { path = "../rune/crates/rune-kit", features = ["markdown"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

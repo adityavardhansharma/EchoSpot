@@ -26,12 +26,13 @@ pub const APP_ID: &str = "echospot";
 
 fn setup(s: &mut App, waker: Waker) {
     s.icons.attach(ImageCache::new(waker.clone()));
-    s.files.configure(waker);
+    s.files.configure(waker.clone());
+    s.ext.configure(waker);
 }
 
 fn poll(s: &mut App, clock: f64, tx: &mut Tx) -> bool {
     s.clock = clock;
-    let mut changed = false;
+    let mut changed = ext::poll(s, tx);
     if s.files.poll() && s.top().route == model::Route::Files {
         s.refresh_keeping();
         changed = true;

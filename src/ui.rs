@@ -219,7 +219,7 @@ fn split_body(s: &App, p: &Palette, scale: f32, screen: &Screen) -> El {
     row().pin(FULL, FULL, FULL, FULL).child(left).child(rule).child(right)
 }
 
-fn grid_body(p: &Palette, screen: &Screen, columns: usize) -> El {
+fn grid_body(s: &App, p: &Palette, scale: f32, screen: &Screen, columns: usize) -> El {
     if screen.items.is_empty() {
         return el().pin(FULL, FULL, FULL, FULL).child(empty_state(p, screen));
     }
@@ -240,16 +240,19 @@ fn grid_body(p: &Palette, screen: &Screen, columns: usize) -> El {
             Row::Item(i) => {
                 let (item, index) = (&screen.items[*i], *i);
                 let selected = index == screen.sel;
-                let glyph = match &item.icon {
-                    IconSrc::Emoji(e) => e.clone(),
-                    _ => String::new(),
+                // An emoji fills its tile; anything else is a picture over its title.
+                let face = match &item.icon {
+                    IconSrc::Emoji(e) => text(e.clone()).font(TextStyle::new((cell * 0.42).min(34.0), 400.0).lh(cell * 0.56)),
+                    other => col().center().gap(space::XS)
+                        .child(icon_slot(s, p, scale, other, (cell * 0.5).round()))
+                        .child(text(item.title.clone()).font(type_::KEY_CAP).color(p.text_secondary).truncate().max_w(cell - space::MD)),
                 };
                 let mut tile = el().key(format!("row-{}", item.id)).size(cell, cell).radius(radius::EMOJI_CELL).center()
                     .fill(if selected { p.selection } else { p.emoji_cell })
                     .border(if selected { 1.5 } else { 1.0 }, if selected { p.emoji_selection_border } else { Color::TRANSPARENT })
                     .on_press_tx(move |s: &mut App, tx| s.select(index, tx))
                     .on_double_press_tx(|s: &mut App, tx| s.run_primary(tx))
-                    .child(text(glyph).font(type_::EMOJI));
+                    .child(face);
                 if !selected {
                     tile = tile.hover(p.row_hover);
                 }
@@ -364,7 +367,7 @@ fn header(s: &App, p: &Palette, screen: &Screen) -> El {
         bar = bar.child(row().key("filter").h(size::BAR_BUTTON_H).px(space::MD).gap(space::SM).center_y().radius(radius::BAR_CONTROL)
             .hover(p.row_hover).press(p.control_surface)
             .on_press(|s: &mut App| s.open_filter_menu())
-            .child(icon(if screen.layout == (Layout::Grid { columns: 8 }) { &icons::GRID } else { &icons::LIST }, 14.0).color(p.text_secondary))
+            .child(icon(if matches!(screen.layout, Layout::Grid { .. }) { &icons::GRID } else { &icons::LIST }, 14.0).color(p.text_secondary))
             .child(text(name).font(type_::BAR).color(p.text.alpha(0.9)))
             .child(icon(&icons::CHEVRON_DOWN, 11.0).color(p.text_secondary)));
     }
@@ -499,12 +502,7 @@ fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
         row().key(format!("dialog-{index}")).grow(1.0).h(size::DIALOG_BUTTON_H).center().radius(radius::ROW)
             .fill(if lit { p.selection.alpha(0.16) } else { p.control_surface }).hover(p.row_hover).press(p.control_pressed)
             .border(1.0, if lit { p.border } else { Color::TRANSPARENT })
-            .on_press_tx(move |s: &mut App, tx| {
-                let confirm = s.dialog.take();
-                if let (1, Some(c)) = (index, confirm) {
-                    s.perform(c.act, tx);
-                }
-            })
+            .on_press_tx(move |s: &mut App, tx| s.answer_dialog(index == 1, tx))
             .child(text(label.to_string()).font(type_::ROW_TRAILING).color(color))
     };
     let tint = if d.destructive { p.destructive } else { p.text_secondary };
@@ -522,7 +520,7 @@ fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
             .child(button("Cancel", 0, p.text_secondary))
             .child(button(&d.confirm, 1, if d.destructive { p.destructive } else { p.primary_action })));
     let dim = el().key("dialog-dim").pin(FULL, FULL, FULL, FULL).fill(p.dialog_dimming).hit()
-        .transition(Transition::opacity()).on_press(|s: &mut App| s.dialog = None);
+        .transition(Transition::opacity()).on_press_tx(|s: &mut App, tx| s.answer_dialog(false, tx));
     el().pin(FULL, FULL, FULL, FULL).child(dim).child(row().pin(FULL, FULL, FULL, FULL).center().child(card))
 }
 
@@ -538,7 +536,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
             _ => list_body(s, &p, scale, screen),
         },
         (None, Layout::Split) => split_body(s, &p, scale, screen),
-        (None, Layout::Grid { columns }) => grid_body(&p, screen, columns),
+        (None, Layout::Grid { columns }) => grid_body(s, &p, scale, screen, columns),
     };
     let mut panel = el().key("panel").absolute(size::WINDOW_MARGIN, size::WINDOW_MARGIN).size(size::PANEL_W, size::PANEL_H)
         .radius(radius::PANEL).clip_rounded(radius::PANEL)

@@ -111,6 +111,8 @@ pub struct App {
     pub backdrop: rune::Pixels,
     pub has_backdrop: bool,
     pub was_focused: bool,
+    /// The extension call a confirm dialog answers: session and call id.
+    pub dialog_reply: Option<(u64, u64)>,
 }
 
 impl App {
@@ -142,6 +144,7 @@ impl App {
             backdrop: rune::Pixels::new(),
             has_backdrop: false,
             was_focused: false,
+            dialog_reply: None,
         };
         app.refresh();
         app
@@ -216,8 +219,12 @@ impl App {
                 }
                 self.ext.stop(id);
             }
-            self.screens.pop();
-            self.form = None;
+            let was_form = self.screens.pop().is_some_and(|s| s.route == Route::Form);
+            let ext_form = matches!(self.form.take().map(|f| f.target), Some(features::forms::Target::ExtForm { .. }));
+            // An extension whose whole view is a form leaves with it.
+            if was_form && ext_form && self.screens.len() > 1 {
+                return self.pop(tx);
+            }
             self.top_mut().query.focused = true;
             self.refresh();
             tx.instant();
@@ -394,6 +401,9 @@ impl App {
         match menu.kind {
             MenuKind::Filter => {
                 self.top_mut().filter = index;
+                if let Route::Ext(id) = self.top().route {
+                    crate::ext::filter_changed(self, id, index);
+                }
                 self.refresh();
             }
             _ => {
@@ -591,20 +601,29 @@ impl App {
     }
 
     pub fn query_changed(&mut self, tx: &mut Tx) {
+        if let Route::Ext(id) = self.top().route {
+            let text = self.top().query.text.clone();
+            crate::ext::search_changed(self, id, &text);
+        }
         self.refresh();
         tx.scroll_to_instant("list", 0.0, 0.0);
     }
 
+    /// Closes the dialog with its answer: runs its action, or replies to the extension that asked.
+    pub fn answer_dialog(&mut self, confirmed: bool, tx: &mut Tx) {
+        let Some(dialog) = self.dialog.take() else { return };
+        if self.dialog_reply.is_some() {
+            crate::ext::reply_confirm(self, confirmed);
+        } else if confirmed {
+            self.perform(dialog.act, tx);
+        }
+    }
+
     fn dialog_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
         match ev.key {
-            Key::Escape => self.dialog = None,
+            Key::Escape => self.answer_dialog(false, tx),
             Key::Left | Key::Right | Key::Tab => self.dialog_sel = 1 - self.dialog_sel,
-            Key::Enter => {
-                let confirm = self.dialog.take();
-                if let (1, Some(c)) = (self.dialog_sel, confirm) {
-                    self.perform(c.act, tx);
-                }
-            }
+            Key::Enter => self.answer_dialog(self.dialog_sel == 1, tx),
             _ => {}
         }
         true

@@ -57,7 +57,8 @@ pub fn tone_glyph(tone: Tone, p: &theme::Palette) -> El {
         Tone::Neutral => (&icons::INFO, p.text_secondary),
         Tone::Progress => (&icons::REFRESH, p.primary_action),
     };
-    icon(glyph, 14.0).color(color)
+    let glyph = icon(glyph, 14.0).color(color);
+    if tone == Tone::Progress { glyph.looping(rune::LoopSpec::rotation(0.9)) } else { glyph }
 }
 
 pub fn view(hud: &Hud, _: &mut Cx<Hud>) -> El {
