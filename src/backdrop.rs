@@ -79,8 +79,19 @@ fn parse_ppm(bytes: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
 /// Captures what the panel will cover, with its bleed. About 35 ms; `None` without `grim`.
 pub fn capture(top: f32) -> Option<(u32, u32, Vec<u8>)> {
     let (px, py) = panel_origin(top)?;
+    capture_rect(px, py, size::PANEL_W, size::PANEL_H)
+}
+
+/// Where a panel of this size lands when its window is centred on the focused monitor.
+pub fn centered_origin(w: f32, h: f32) -> Option<(f32, f32)> {
+    let (x, y, mw, mh) = monitor()?;
+    Some((x + ((mw - w) / 2.0).floor(), y + ((mh - h) / 2.0).floor()))
+}
+
+/// Captures a rectangle of the screen (layout points) plus the bleed around it.
+pub fn capture_rect(px: f32, py: f32, w: f32, h: f32) -> Option<(u32, u32, Vec<u8>)> {
     let geometry = format!("{},{} {}x{}", (px - BLEED).round(), (py - BLEED).round(),
-        (size::PANEL_W + BLEED * 2.0).round(), (size::PANEL_H + BLEED * 2.0).round());
+        (w + BLEED * 2.0).round(), (h + BLEED * 2.0).round());
     let out = Command::new("grim").args(["-g", &geometry, "-t", "ppm", "-"])
         .stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
     out.status.success().then(|| parse_ppm(&out.stdout)).flatten()

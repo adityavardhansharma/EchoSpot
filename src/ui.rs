@@ -13,7 +13,7 @@ use crate::theme::{self, Palette, motion, radius, size, space, type_};
 const FULL: Option<f32> = Some(0.0);
 
 /// A floating control's glass: the list blurred behind a tint, lit along its top rim.
-fn glass(e: El, p: &Palette, r: f32) -> El {
+pub fn glass(e: El, p: &Palette, r: f32) -> El {
     e.radius(r).backdrop_blur(16.0).fill(p.glass_tint)
         .border_gradient(1.0, p.glass_rim_top, p.glass_rim_bottom)
         .shadow(3.0, 14.0, p.glass_shadow)
@@ -566,6 +566,30 @@ fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
     el().pin(FULL, FULL, FULL, FULL).child(dim).child(row().pin(FULL, FULL, FULL, FULL).center().child(card))
 }
 
+/// The surface every EchoSpot window stands on: a rounded panel inset in its window by
+/// `WINDOW_MARGIN` (room for the shadow), filled with the screen behind it, blurred, under the
+/// scrim. `backdrop` is that capture when there is one; `mode` is the Surface setting.
+pub fn panel_surface(key: &str, p: &Palette, (w, h): (f32, f32), backdrop: Option<&rune::Pixels>, mode: &str) -> El {
+    let panel = el().key(key.to_string()).absolute(size::WINDOW_MARGIN, size::WINDOW_MARGIN).size(w, h)
+        .radius(radius::PANEL).clip_rounded(radius::PANEL)
+        .shadow(16.0, 48.0, Color::BLACK.alpha(if p.dark { 0.42 } else { 0.24 }))
+        .box_shadow(rune::Shadow::core_animation(0.0, 0.0, 0.5, Color::BLACK.alpha(0.55)));
+    match (backdrop, mode) {
+        (Some(pixels), _) => {
+            let bleed = crate::backdrop::BLEED;
+            panel.child(el().absolute(-bleed, -bleed).size(w + bleed * 2.0, h + bleed * 2.0).pixels(pixels).blur(26.0).inert())
+                .child(el().pin(FULL, FULL, FULL, FULL).fill(p.panel_scrim).inert())
+        }
+        (None, "compositor") => panel.fill(p.panel_scrim),
+        _ => panel.fill(if p.dark { rune::color::hex("#1b1b1d").unwrap_or(Color::BLACK).alpha(0.94) } else { Color::WHITE.alpha(0.94) }),
+    }
+}
+
+/// The rim Liquid Glass lights along a panel's top edge, fading around its corners. Drawn last.
+pub fn panel_rim(p: &Palette) -> El {
+    el().pin(FULL, FULL, FULL, FULL).radius(radius::PANEL).border_gradient(1.0, p.panel_rim_top, p.panel_rim_bottom).inert()
+}
+
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let env = cx.env();
     let p = theme::palette(s.settings.dark(env.system_dark));
@@ -581,21 +605,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (None, Layout::Split) => split_body(s, &p, scale, screen),
         (None, Layout::Grid { columns }) => grid_body(s, &p, scale, screen, columns),
     };
-    let mut panel = el().key("panel").absolute(size::WINDOW_MARGIN, size::WINDOW_MARGIN).size(size::PANEL_W, size::PANEL_H)
-        .radius(radius::PANEL).clip_rounded(radius::PANEL)
-        .shadow(16.0, 48.0, Color::BLACK.alpha(if p.dark { 0.42 } else { 0.24 }))
-        .box_shadow(rune::Shadow::core_animation(0.0, 0.0, 0.5, Color::BLACK.alpha(0.55)));
-    // The surface: the screen behind the panel, blurred, under the scrim.
-    match (s.has_backdrop, s.settings.backdrop.as_str()) {
-        (true, _) => {
-            let bleed = crate::backdrop::BLEED;
-            panel = panel.child(el().absolute(-bleed, -bleed).size(size::PANEL_W + bleed * 2.0, size::PANEL_H + bleed * 2.0)
-                .pixels(&s.backdrop).blur(26.0).inert())
-                .child(el().pin(FULL, FULL, FULL, FULL).fill(p.panel_scrim).inert());
-        }
-        (false, "compositor") => panel = panel.fill(p.panel_scrim),
-        _ => panel = panel.fill(if p.dark { rune::color::hex("#1b1b1d").unwrap_or(Color::BLACK).alpha(0.94) } else { Color::WHITE.alpha(0.94) }),
-    }
+    let mut panel = panel_surface("panel", &p, (size::PANEL_W, size::PANEL_H), s.has_backdrop.then_some(&s.backdrop), &s.settings.backdrop);
     panel = panel.child(body).child(header(s, &p, screen)).child(bottom_bar(s, &p, screen));
     if let Some(menu) = &s.menu {
         panel = panel.child(menu_view(s, &p, menu));
@@ -603,8 +613,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if let Some(dialog) = &s.dialog {
         panel = panel.child(dialog_view(s, &p, dialog));
     }
-    // The rim Liquid Glass lights along the panel's top edge, fading around its corners.
-    panel = panel.child(el().pin(FULL, FULL, FULL, FULL).radius(radius::PANEL).border_gradient(1.0, p.panel_rim_top, p.panel_rim_bottom).inert());
+    panel = panel.child(panel_rim(&p));
     // The window is larger than the panel so the shadow has room; a press out there dismisses.
     el().w_full().h_full()
         .child(el().key("outside").pin(FULL, FULL, FULL, FULL).hit().on_press_tx(|s: &mut App, tx| s.hide(tx)))
