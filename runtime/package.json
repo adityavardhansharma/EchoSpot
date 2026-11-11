@@ -1,0 +1,15 @@
+{
+  "name": "echospot-extension-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Runs Raycast extensions for EchoSpot: React, a JSON-tree reconciler and an @raycast/api shim, bundled into one file Node runs.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "react": "^19.2.0",
+    "react-reconciler": "^0.33.0"
+  }
+}
