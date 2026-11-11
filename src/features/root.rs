@@ -6,6 +6,7 @@ use crate::app::{App, Built};
 use crate::features::{calc, fuzzy, quicklinks, system, windows};
 use crate::icons;
 use crate::model::*;
+use crate::theme::Tint;
 use crate::util;
 
 struct Builtin {
@@ -13,20 +14,21 @@ struct Builtin {
     title: &'static str,
     keywords: &'static str,
     icon: &'static rune::Icon,
+    tint: Tint,
     route: Route,
 }
 
 fn builtins() -> Vec<Builtin> {
     vec![
-        Builtin { id: "cmd:clipboard", title: "Clipboard History", keywords: "paste copy history", icon: &icons::CLIPBOARD, route: Route::Clipboard },
-        Builtin { id: "cmd:emoji", title: "Search Emoji & Symbols", keywords: "emoji emoticon smiley symbols", icon: &icons::SMILE, route: Route::Emoji },
-        Builtin { id: "cmd:files", title: "Search Files", keywords: "find file folder document", icon: &icons::FILE_SEARCH, route: Route::Files },
-        Builtin { id: "cmd:windows", title: "Switch Windows", keywords: "window switcher open apps", icon: &icons::WINDOWS, route: Route::Windows },
-        Builtin { id: "cmd:snippets", title: "Search Snippets", keywords: "snippet text expand", icon: &icons::TEXT, route: Route::Snippets },
-        Builtin { id: "cmd:quicklinks", title: "Search Quicklinks", keywords: "quicklink bookmark url link", icon: &icons::LINK, route: Route::Quicklinks },
-        Builtin { id: "cmd:themes", title: "Change Theme", keywords: "omarchy theme appearance colors", icon: &icons::PALETTE, route: Route::Themes },
-        Builtin { id: "cmd:store", title: "Store", keywords: "raycast extensions install browse", icon: &icons::STORE, route: Route::Store },
-        Builtin { id: "cmd:extensions", title: "Manage Extensions", keywords: "raycast extensions installed uninstall", icon: &icons::PUZZLE, route: Route::Extensions },
+        Builtin { id: "cmd:clipboard", title: "Clipboard History", keywords: "paste copy history", icon: &icons::CLIPBOARD, tint: Tint::Orange, route: Route::Clipboard },
+        Builtin { id: "cmd:emoji", title: "Search Emoji & Symbols", keywords: "emoji emoticon smiley symbols", icon: &icons::SMILE, tint: Tint::Yellow, route: Route::Emoji },
+        Builtin { id: "cmd:files", title: "Search Files", keywords: "find file folder document", icon: &icons::FILE_SEARCH, tint: Tint::Blue, route: Route::Files },
+        Builtin { id: "cmd:windows", title: "Switch Windows", keywords: "window switcher open apps", icon: &icons::WINDOWS, tint: Tint::Indigo, route: Route::Windows },
+        Builtin { id: "cmd:snippets", title: "Search Snippets", keywords: "snippet text expand", icon: &icons::TEXT, tint: Tint::Red, route: Route::Snippets },
+        Builtin { id: "cmd:quicklinks", title: "Search Quicklinks", keywords: "quicklink bookmark url link", icon: &icons::LINK, tint: Tint::Teal, route: Route::Quicklinks },
+        Builtin { id: "cmd:themes", title: "Change Theme", keywords: "omarchy theme appearance colors", icon: &icons::PALETTE, tint: Tint::Pink, route: Route::Themes },
+        Builtin { id: "cmd:store", title: "Store", keywords: "raycast extensions install browse", icon: &icons::STORE, tint: Tint::Cyan, route: Route::Store },
+        Builtin { id: "cmd:extensions", title: "Manage Extensions", keywords: "raycast extensions installed uninstall", icon: &icons::PUZZLE, tint: Tint::Green, route: Route::Extensions },
     ]
 }
 
@@ -66,28 +68,28 @@ fn entries(app: &App) -> Vec<Entry> {
         out.push(Entry { item, keywords: format!("{} {} {}", a.generic, a.keywords, a.exec.split_whitespace().next().unwrap_or("")) });
     }
     for b in builtins() {
-        let item = Item::new(b.id, b.title, IconSrc::Glyph(b.icon)).trailing("Command")
+        let item = Item::new(b.id, b.title, IconSrc::Badge(b.icon, b.tint)).trailing("Command")
             .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Push(b.route.clone())))
             .action(favorite_action(app, b.id));
         out.push(Entry { item, keywords: b.keywords.into() });
     }
     out.push(Entry {
-        item: Item::new("cmd:new-snippet", "Create Snippet", IconSrc::Glyph(&icons::PLUS)).trailing("Command")
+        item: Item::new("cmd:new-snippet", "Create Snippet", IconSrc::Badge(&icons::PLUS, Tint::Red)).trailing("Command")
             .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Snippet(SnippetOp::New))),
         keywords: "new snippet add text".into(),
     });
     out.push(Entry {
-        item: Item::new("cmd:new-quicklink", "Create Quicklink", IconSrc::Glyph(&icons::PLUS)).trailing("Command")
+        item: Item::new("cmd:new-quicklink", "Create Quicklink", IconSrc::Badge(&icons::PLUS, Tint::Teal)).trailing("Command")
             .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Quicklink(QuicklinkOp::New))),
         keywords: "new quicklink add bookmark url".into(),
     });
     out.push(Entry {
-        item: Item::new("cmd:settings", "EchoSpot Settings", IconSrc::Glyph(&icons::GEAR)).trailing("Command")
+        item: Item::new("cmd:settings", "EchoSpot Settings", IconSrc::Badge(&icons::GEAR, Tint::Graphite)).trailing("Command")
             .action(Action::new("Open Settings", &icons::GEAR, Act::OpenSettings(String::new()))),
         keywords: "preferences settings configure options".into(),
     });
     out.push(Entry {
-        item: Item::new("cmd:ai", "AI Chat", IconSrc::Glyph(&icons::SPARKLES)).trailing("Command")
+        item: Item::new("cmd:ai", "AI Chat", IconSrc::Badge(&icons::AI, Tint::Violet)).trailing("Command")
             .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Ai(AiOp::Open(String::new()))))
             .action(favorite_action(app, "cmd:ai")),
         keywords: "ai ask claude gpt assistant quick ai chat".into(),
@@ -95,7 +97,7 @@ fn entries(app: &App) -> Vec<Entry> {
     for q in crate::features::ai::QUICK_ACTIONS {
         let id = format!("ai:{}", q.id);
         out.push(Entry {
-            item: Item::new(id.clone(), q.title, IconSrc::Glyph(q.icon)).trailing("Quick Action")
+            item: Item::new(id.clone(), q.title, IconSrc::Badge(q.icon, Tint::Violet)).trailing("Quick Action")
                 .action(Action::new("Run on Selected Text", &icons::SPARKLES, Act::Ai(AiOp::Quick(q.id.into()))))
                 .action(favorite_action(app, &id)),
             keywords: q.keywords.into(),
@@ -111,7 +113,7 @@ fn entries(app: &App) -> Vec<Entry> {
             })),
             None => run,
         };
-        let item = Item::new(id.clone(), c.title, IconSrc::Glyph(c.icon)).trailing("Command")
+        let item = Item::new(id.clone(), c.title, IconSrc::Badge(c.icon, system::tint(c.action))).trailing("Command")
             .action(Action::new("Run Command", &icons::BOLT, act))
             .action(favorite_action(app, &id));
         out.push(Entry { item, keywords: c.keywords.into() });
@@ -119,7 +121,7 @@ fn entries(app: &App) -> Vec<Entry> {
     if windows::hyprland() {
         for c in windows::COMMANDS {
             let id = format!("win:{:?}", c.op);
-            let item = Item::new(id.clone(), c.title, IconSrc::Glyph(c.icon)).trailing("Window")
+            let item = Item::new(id.clone(), c.title, IconSrc::Badge(c.icon, Tint::Indigo)).trailing("Window")
                 .action(Action::new("Run Command", &icons::BOLT, Act::Window(c.op)))
                 .action(favorite_action(app, &id));
             out.push(Entry { item, keywords: c.keywords.into() });
@@ -141,7 +143,7 @@ fn entries(app: &App) -> Vec<Entry> {
     }
     for s in &app.snippets.list {
         let id = format!("snip:{}", s.id);
-        let item = Item::new(id.clone(), s.name.clone(), IconSrc::Glyph(&icons::TEXT)).trailing("Snippet")
+        let item = Item::new(id.clone(), s.name.clone(), IconSrc::Badge(&icons::TEXT, Tint::Red)).trailing("Snippet")
             .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(crate::features::snippets::expand(&s.text))))
             .action(Action::new("Copy to Clipboard", &icons::COPY, Act::Copy(crate::features::snippets::expand(&s.text))).keys("ctrl+shift+c"));
         out.push(Entry { item, keywords: format!("{} {}", s.keyword, util::truncate(&s.text, 60)) });
@@ -154,9 +156,9 @@ fn entries(app: &App) -> Vec<Entry> {
 /// the rows already in the results, so a quicklink the query found by name isn't offered twice.
 fn fallbacks(app: &App, query: &str, shown: &std::collections::HashSet<String>) -> Vec<Item> {
     let mut out = vec![
-        Item::new("fb:ai", "Quick AI", IconSrc::Glyph(&icons::SPARKLES)).trailing("Command")
+        Item::new("fb:ai", "Ask AI", IconSrc::Badge(&icons::AI, Tint::Violet)).trailing("Command")
             .action(Action::new("Ask AI", &icons::SPARKLES, Act::Ai(AiOp::Open(query.into())))),
-        Item::new("fb:files", "Search Files", IconSrc::Glyph(&icons::FILE_SEARCH)).trailing("Command")
+        Item::new("fb:files", "Search Files", IconSrc::Badge(&icons::FILE_SEARCH, Tint::Blue)).trailing("Command")
             .action(Action::new("Search Files", &icons::FILE_SEARCH, Act::PushQuery(Route::Files, query.into()))),
     ];
     for q in app.quicklinks.list.iter().filter(|q| quicklinks::takes_query(&q.link) && !shown.contains(&format!("ql:{}", q.id))) {
@@ -202,7 +204,7 @@ pub fn build(app: &App, query: &str) -> Built {
 
     if let Some(card) = calc::evaluate(q) {
         let answer = card.right.clone();
-        let mut item = Item::new("calc", answer.clone(), IconSrc::Glyph(&icons::CALCULATOR))
+        let mut item = Item::new("calc", answer.clone(), IconSrc::Badge(&icons::CALCULATOR, Tint::Orange))
             .action(Action::new("Copy Answer", &icons::COPY, Act::Copy(answer.clone())))
             .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(answer.clone())).keys("ctrl+enter"))
             .action(Action::new("Copy Plain Number", &icons::HASH, Act::Copy(answer.replace(',', "").split(' ').next().unwrap_or("").to_string())).keys("ctrl+shift+c"));
@@ -286,7 +288,7 @@ pub fn themes(_app: &App, query: &str) -> Built {
     let items: Vec<Item> = names.iter().filter(|n| q.is_empty() || fuzzy::score(q, &pretty(n)).is_some()).map(|n| {
         let title = pretty(n);
         let active = current == title.to_lowercase() || current == *n;
-        Item::new(format!("theme:{n}"), title.clone(), IconSrc::Glyph(&icons::PALETTE)).trailing(if active { "Current" } else { "Theme" })
+        Item::new(format!("theme:{n}"), title.clone(), IconSrc::Badge(&icons::PALETTE, Tint::Pink)).trailing(if active { "Current" } else { "Theme" })
             .action(Action::new("Apply Theme", &icons::CHECK, Act::ShellQuiet { cmd: format!("omarchy theme set {}", util::quote(&title)), done: format!("{title} Applied") }))
     }).collect();
     let mut sections = Sections::default();

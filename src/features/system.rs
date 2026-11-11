@@ -3,6 +3,7 @@
 use rune::Icon;
 
 use crate::icons;
+use crate::theme::Tint;
 use crate::util::{has_program, sh_ok, sh_output};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -84,6 +85,21 @@ pub static COMMANDS: &[SystemCommand] = &[
     SystemCommand { action: ReloadHyprland, title: "Reload Hyprland", keywords: "hyprctl reload config", icon: &icons::REFRESH, confirm: None },
     SystemCommand { action: RestartShell, title: "Restart Omarchy Shell", keywords: "bar quickshell restart", icon: &icons::REFRESH, confirm: None },
 ];
+
+/// The colour family a command's tile wears: what it acts on, not what it is called.
+pub fn tint(action: SystemAction) -> Tint {
+    match action {
+        Restart | Shutdown | EmptyTrash => Tint::Red,
+        Lock | Sleep | Logout | UpdateSystem | ReloadHyprland | RestartShell | ToggleBar => Tint::Graphite,
+        VolumeUp | VolumeDown | ToggleMute | ToggleMicMute | PlayPause | NextTrack | PreviousTrack => Tint::Pink,
+        BrightnessUp | BrightnessDown | ToggleNightLight => Tint::Yellow,
+        ToggleWifi | ToggleBluetooth => Tint::Blue,
+        ToggleIdle => Tint::Orange,
+        ToggleNotifications => Tint::Indigo,
+        Screensaver | NextBackground => Tint::Cyan,
+        ScreenshotRegion | ScreenshotFull | ScreenRecord | ColorPicker | ExtractText => Tint::Teal,
+    }
+}
 
 pub fn command(action: SystemAction) -> &'static SystemCommand {
     COMMANDS.iter().find(|c| c.action == action).expect("every action has a command")
