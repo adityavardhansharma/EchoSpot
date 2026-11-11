@@ -126,3 +126,17 @@ pub fn truncate(s: &str, max: usize) -> String {
     }
     out
 }
+
+/// How long ago a moment was, as a row's quiet label: "Just now", "12m ago", "Yesterday", "3 Nov".
+pub fn ago(secs: u64) -> String {
+    let d = now_secs().saturating_sub(secs);
+    match d {
+        0..=59 => "Just now".into(),
+        60..=3599 => format!("{}m ago", d / 60),
+        3600..=86_399 => format!("{}h ago", d / 3600),
+        86_400..=172_799 => "Yesterday".into(),
+        172_800..=604_799 => format!("{}d ago", d / 86_400),
+        _ => chrono::DateTime::from_timestamp(secs as i64, 0)
+            .map(|t| t.with_timezone(&chrono::Local).format("%-d %b").to_string()).unwrap_or_default(),
+    }
+}
