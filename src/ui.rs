@@ -359,6 +359,17 @@ fn header(s: &App, p: &Palette, screen: &Screen) -> El {
             .on_input_key(|s: &mut App, ev, tx| s.key(ev, tx))
             .on_input_change(|s: &mut App, tx| s.query_changed(tx)));
     }
+    if root && s.form.is_none() {
+        // Tab hands whatever is typed to the model.
+        bar = bar.child(row().key("quick-ai").h(size::BAR_BUTTON_H).px(space::MD).gap(space::SM).center_y().radius(radius::BAR_CONTROL)
+            .hover(p.row_hover).press(p.control_surface)
+            .on_press_tx(|s: &mut App, tx| {
+                let prompt = s.top().query.text.clone();
+                s.perform(Act::Ai(AiOp::Open(prompt)), tx);
+            })
+            .child(text("Quick AI").font(type_::BAR).color(p.text_secondary))
+            .child(keycap(p, "⇥", true)));
+    }
     if screen.loading {
         bar = bar.child(icon(&icons::REFRESH, 14.0).color(p.text_tertiary).looping(rune_loop()));
     }
@@ -533,6 +544,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (Some(form), _) => form_body(&p, form),
         (None, Layout::List) => match &screen.route {
             Route::Ext(id) => crate::ext::view::body(s, &p, scale, *id).unwrap_or_else(|| list_body(s, &p, scale, screen)),
+            Route::Ai => crate::features::ai::body(s, &p),
             _ => list_body(s, &p, scale, screen),
         },
         (None, Layout::Split) => split_body(s, &p, scale, screen),

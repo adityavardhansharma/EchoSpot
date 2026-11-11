@@ -100,6 +100,7 @@ pub struct App {
     pub snippets: features::snippets::Snippets,
     pub quicklinks: features::quicklinks::Quicklinks,
     pub ext: Extensions,
+    pub chat: features::ai::Chat,
     pub form: Option<features::forms::Form>,
     pub clock: f64,
     pub scale: f32,
@@ -135,6 +136,7 @@ impl App {
             snippets: features::snippets::Snippets::load(),
             quicklinks: features::quicklinks::Quicklinks::load(),
             ext: Extensions::load(),
+            chat: features::ai::Chat::default(),
             form: None,
             clock: 0.0,
             scale: 2.0,
@@ -178,6 +180,7 @@ impl App {
             Route::Quicklinks => features::quicklinks::build(self, &query),
             Route::Themes => features::root::themes(self, &query),
             Route::Form => Built::list(Sections::default(), ""),
+            Route::Ai => features::ai::build(self, &query),
             Route::Store => crate::ext::store::build(self, &query),
             Route::Extensions => crate::ext::store::installed(self, &query),
             Route::Ext(id) => crate::ext::view::build(self, id, &query),
@@ -575,6 +578,8 @@ impl App {
                 self.dialog = Some(*confirm);
             }
             Act::Ext(act) => crate::ext::perform(self, act, tx),
+            Act::Ai(op) => features::ai::perform(self, op, tx),
+            Act::OpenSettings(_pane) => self.perform(Act::OpenPath(crate::settings::Settings::path()), tx),
             Act::Toast(text) => {
                 if text == "reload" {
                     self.apps = features::apps::scan();
@@ -692,6 +697,10 @@ impl App {
             Key::Left if plain && empty_query && matches!(layout, Layout::Grid { .. }) => self.step(-1, tx),
             Key::PageDown => self.step(8, tx),
             Key::PageUp => self.step(-8, tx),
+            Key::Escape if self.top().route == Route::Ai && self.chat.streaming => {
+                self.chat.cancel();
+                self.refresh();
+            }
             Key::Escape => {
                 if !empty_query {
                     self.top_mut().query.clear();
@@ -708,6 +717,10 @@ impl App {
             Key::Command('q') => tx.quit(),
             Key::Command('w') => self.hide(tx),
             Key::Tab if plain && !self.top().filters.is_empty() => self.open_filter_menu(),
+            Key::Tab if plain && self.top().route == Route::Root => {
+                let prompt = self.top().query.text.clone();
+                self.perform(Act::Ai(AiOp::Open(prompt)), tx);
+            }
             Key::Enter if plain => self.run_primary(tx),
             _ => {
                 let act = self.top().selected()

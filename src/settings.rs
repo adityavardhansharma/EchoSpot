@@ -22,11 +22,12 @@ pub struct Settings {
     /// (works with Hyprland's blur off, Omarchy's default); "compositor" leaves the panel
     /// translucent for Hyprland's own blur; "none" draws it nearly opaque.
     pub backdrop: String,
+    pub ai: crate::features::ai::AiSettings,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into() }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), ai: Default::default() }
     }
 }
 
@@ -40,6 +41,13 @@ impl Settings {
             util::write_json(&path, &Settings::default());
         }
         util::read_json(&path)
+    }
+    pub fn save(&self) {
+        let path = Self::path();
+        util::write_json(&path, self);
+        // The file can hold an API key: readable by this user only.
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
     }
     pub fn dark(&self, system_dark: bool) -> bool {
         match self.appearance.as_str() {

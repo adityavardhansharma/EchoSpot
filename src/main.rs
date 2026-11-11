@@ -27,7 +27,8 @@ pub const APP_ID: &str = "echospot";
 fn setup(s: &mut App, waker: Waker) {
     s.icons.attach(ImageCache::new(waker.clone()));
     s.files.configure(waker.clone());
-    s.ext.configure(waker);
+    s.ext.configure(waker.clone());
+    s.chat.configure(waker);
 }
 
 fn poll(s: &mut App, clock: f64, tx: &mut Tx) -> bool {
@@ -35,6 +36,12 @@ fn poll(s: &mut App, clock: f64, tx: &mut Tx) -> bool {
     let mut changed = ext::poll(s, tx);
     if s.files.poll() && s.top().route == model::Route::Files {
         s.refresh_keeping();
+        changed = true;
+    }
+    if s.chat.poll() {
+        if s.top().route == model::Route::Ai {
+            s.refresh();
+        }
         changed = true;
     }
     if let Some(toast) = &s.toast {
@@ -75,6 +82,7 @@ fn main() {
                 return;
             }
         }
+        "ext" => return ext::store::cli(&args[1..]),
         "debug-icons" => {
             for app in features::apps::scan() {
                 println!("{:<30} {:<36} {}", app.name, app.icon_name, app.icon.map(|p| p.display().to_string()).unwrap_or_else(|| "MISSING".into()));

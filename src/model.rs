@@ -88,8 +88,23 @@ pub enum Act {
     Quicklink(QuicklinkOp),
     Confirm(Box<Confirm>),
     Ext(crate::ext::ExtAct),
+    Ai(AiOp),
+    /// Open Settings at a pane.
+    OpenSettings(String),
     Toast(String),
     Quit,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum AiOp {
+    Send,
+    Stop,
+    New,
+    Copy,
+    /// A quick action on the selected text, by id.
+    Quick(String),
+    /// Open the chat, asking this first when it isn't empty.
+    Open(String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -148,6 +163,7 @@ pub enum Route {
     Store,
     Extensions,
     Themes,
+    Ai,
     /// A form: its fields live in `App::form`.
     Form,
     /// A running extension command; the session owns the tree.

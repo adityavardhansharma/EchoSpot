@@ -211,6 +211,27 @@ fn download(listing: &Listing) -> Result<String, String> {
     Ok(listing.title.clone())
 }
 
+/// `echospot ext search <query>` and `echospot ext install <query>`: the store from a terminal.
+pub fn cli(args: &[String]) {
+    let query = args.get(1..).map(|a| a.join(" ")).unwrap_or_default();
+    let listings = fetch(&query);
+    match args.first().map(String::as_str) {
+        Some("search") => {
+            for l in &listings {
+                println!("{:<34} {:<22} {:>8}  {}", l.title, l.id(), count(l.downloads), util::truncate(&l.description, 60));
+            }
+        }
+        Some("install") => match listings.first() {
+            Some(l) => match download(l) {
+                Ok(title) => println!("Installed {title} to {}", super::extensions_dir().join(l.id()).display()),
+                Err(e) => eprintln!("Install failed: {e}"),
+            },
+            None => eprintln!("No extension matches “{query}”."),
+        },
+        _ => eprintln!("usage: echospot ext <search|install> <query>"),
+    }
+}
+
 pub fn install(app: &mut App, listing: Listing) {
     if app.ext.store.installing.is_some() {
         return app.toast("An install is already running", Tone::Neutral);

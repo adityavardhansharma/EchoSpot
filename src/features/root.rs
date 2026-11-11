@@ -81,6 +81,21 @@ fn entries(app: &App) -> Vec<Entry> {
             .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Quicklink(QuicklinkOp::New))),
         keywords: "new quicklink add bookmark url".into(),
     });
+    out.push(Entry {
+        item: Item::new("cmd:ai", "AI Chat", IconSrc::Glyph(&icons::SPARKLES)).trailing("Command")
+            .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Ai(AiOp::Open(String::new()))))
+            .action(favorite_action(app, "cmd:ai")),
+        keywords: "ai ask claude gpt assistant quick ai chat".into(),
+    });
+    for q in crate::features::ai::QUICK_ACTIONS {
+        let id = format!("ai:{}", q.id);
+        out.push(Entry {
+            item: Item::new(id.clone(), q.title, IconSrc::Glyph(q.icon)).trailing("Quick Action")
+                .action(Action::new("Run on Selected Text", &icons::SPARKLES, Act::Ai(AiOp::Quick(q.id.into()))))
+                .action(favorite_action(app, &id)),
+            keywords: q.keywords.into(),
+        });
+    }
     for c in system::COMMANDS.iter().filter(|c| system::available(c.action)) {
         let id = format!("sys:{:?}", c.action);
         let run = Act::System(c.action);
@@ -125,6 +140,8 @@ fn entries(app: &App) -> Vec<Entry> {
 
 fn fallbacks(app: &App, query: &str) -> Vec<Item> {
     let mut out = vec![
+        Item::new("fb:ai", "Quick AI", IconSrc::Glyph(&icons::SPARKLES)).trailing("Command")
+            .action(Action::new("Ask AI", &icons::SPARKLES, Act::Ai(AiOp::Open(query.into())))),
         Item::new("fb:files", "Search Files", IconSrc::Glyph(&icons::FILE_SEARCH)).trailing("Command")
             .action(Action::new("Search Files", &icons::FILE_SEARCH, Act::PushQuery(Route::Files, query.into()))),
     ];
@@ -157,6 +174,7 @@ pub fn build(app: &App, query: &str) -> Built {
         let rest = |kind: &str| all.iter().filter(|e| e.item.trailing == kind && !shown.contains(e.item.id.as_str())).map(|e| e.item.clone()).collect::<Vec<_>>();
         let applications = rest("Application");
         let mut commands = rest("Command");
+        commands.extend(rest("Quick Action"));
         commands.extend(rest("Window"));
         let extensions: Vec<Item> = all.iter()
             .filter(|e| e.item.id.starts_with("ext:") && !shown.contains(e.item.id.as_str())).map(|e| e.item.clone()).collect();

@@ -40,11 +40,13 @@ fn term_score(q: &str, t: &str) -> Option<i32> {
     if let Some(i) = t.find(q) {
         return Some(560 - len_penalty - (i as i32).min(60));
     }
-    // Subsequence, rewarding runs and early hits.
-    let (mut score, mut run, mut last) = (300, 0, None::<usize>);
+    // Subsequence, rewarding runs and early hits. The letters must sit close together: a query
+    // scattered across a long name is noise, not a match.
+    let (mut score, mut run, mut last, mut first) = (300, 0, None::<usize>, None::<usize>);
     let mut chars = t.char_indices();
     for qc in q.chars() {
         let (i, _) = chars.by_ref().find(|&(_, c)| c == qc)?;
+        first.get_or_insert(i);
         if last.is_some_and(|l| l + 1 == i) {
             run += 1;
             score += 6 * run;
@@ -54,7 +56,9 @@ fn term_score(q: &str, t: &str) -> Option<i32> {
         }
         last = Some(i);
     }
-    (q.chars().count() >= 2).then_some((score - len_penalty).max(1))
+    let span = last? - first? + 1;
+    let n = q.chars().count();
+    (n >= 3 && span <= n * 2).then_some((score - len_penalty).max(1))
 }
 
 /// The best score over a row's title and its quieter keywords, which count for less.
