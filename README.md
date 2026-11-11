@@ -1,16 +1,21 @@
 # EchoSpot
 
-EchoSpot is a native command palette for Linux (Hyprland / Omarchy), adapted from [Tinycast](https://github.com/anomalyco/tinycast) and rendered with [Rune](https://github.com/anomalyco/rune).
+A native Raycast alternative for Omarchy, built with [Rune](https://github.com/anomalyco/rune).
 
-> **Warning**
-> This repository is an active **work in progress**. APIs, features, and configuration structures are under active development and **can have breaking changes at any time**.
+> **Warning**  
+> This project is an active work in progress. Features are still under active development and subject to breaking changes.
 
-## Design & Tokens
+## Features
 
-EchoSpot faithfully ports Tinycast's design language, tokens, and layouts (`DesignSystem/Theme.swift`) to Linux, integrating with Omarchy's theme system and Hyprland's window and blur management.
+- **Command Palette & Launcher**: Fast application launcher and system commands.
+- **Calculator**: Inline calculations, functions, and unit conversions.
+- **Clipboard History**: Resident clipboard manager for text and images.
+- **Emoji & Symbols**: Searchable emoji and symbol catalogue with recents and pins.
+- **File Search**: Quick file finder.
+- **Snippets & Quicklinks**: Saved text expansions and custom search shortcuts.
+- **System & Window Controls**: Hyprland window switching and Omarchy system toggles.
+- **Extensions**: Raycast extension runtime support (in progress).
 
-## License & Attribution
+## License
 
-EchoSpot is licensed under the **GNU Affero General Public License v3 (AGPL-3.0)** — see the [LICENSE](LICENSE) file for details.
-
-This project is derived from and based on [Tinycast](https://github.com/anomalyco/tinycast) (Copyright © 2026 Abue Ammar), distributed under the terms of the GNU AGPLv3.
+Licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](LICENSE).
