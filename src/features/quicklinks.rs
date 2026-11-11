@@ -65,8 +65,7 @@ fn encode(s: &str) -> String {
 
 /// The URL a quicklink opens for a query; without one, its site's front page.
 pub fn resolve(link: &str, query: &str) -> String {
-    let takes = link.contains("{query}") || link.contains("{argument}");
-    if takes && query.trim().is_empty() {
+    if takes_query(link) && query.trim().is_empty() {
         // Scheme and host only.
         let end = link.find("://").map(|i| i + 3).and_then(|s| link[s..].find('/').map(|e| s + e)).unwrap_or(link.len());
         return link[..end].to_string();
@@ -74,11 +73,32 @@ pub fn resolve(link: &str, query: &str) -> String {
     link.replace("{query}", &encode(query.trim())).replace("{argument}", &encode(query.trim()))
 }
 
+/// The host of a link: `github.com` for `https://github.com/search?q={query}`.
+pub fn host(link: &str) -> Option<&str> {
+    let rest = link.split_once("://").filter(|(scheme, _)| scheme.starts_with("http")).map(|(_, rest)| rest)?;
+    let host = rest.split(['/', '?', '#']).next()?.rsplit('@').next()?.split(':').next()?;
+    (host.contains('.') && !host.contains(['{', ' '])).then_some(host)
+}
+
+/// A quicklink's picture: its site's icon once fetched, a link glyph until then and for links
+/// that are not web pages.
+pub fn icon(link: &str) -> IconSrc {
+    match host(link).and_then(crate::ext::net::favicon) {
+        Some(path) => IconSrc::File(path),
+        None => IconSrc::Glyph(&icons::LINK),
+    }
+}
+
+/// Whether a link takes what was typed.
+pub fn takes_query(link: &str) -> bool {
+    link.contains("{query}") || link.contains("{argument}")
+}
+
 pub fn build(app: &App, query: &str) -> Built {
     let q = query.trim();
     let mut scored: Vec<(i32, Item)> = app.quicklinks.list.iter().filter_map(|l| {
         let score = if q.is_empty() { 0 } else { fuzzy::score_item(q, &l.name, &format!("{} {}", l.alias, l.link))? };
-        let item = Item::new(format!("quicklink:{}", l.id), l.name.clone(), IconSrc::Glyph(&icons::LINK))
+        let item = Item::new(format!("quicklink:{}", l.id), l.name.clone(), icon(&l.link))
             .subtitle(util::truncate(&l.link, 64))
             .trailing(if l.alias.is_empty() { "Quicklink" } else { &l.alias })
             .action(Action::new("Open Quicklink", &icons::ARROW_UP_RIGHT, Act::Quicklink(QuicklinkOp::Open(l.id.clone(), String::new()))))

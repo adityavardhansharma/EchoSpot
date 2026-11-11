@@ -72,6 +72,52 @@ pub fn cached(url: &str) -> Option<PathBuf> {
     None
 }
 
+/// Whether a downloaded file starts like a picture the image cache can decode, rather than the
+/// HTML page a site answers a missing icon with.
+fn is_picture(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 12];
+    let Ok(n) = std::fs::File::open(path).and_then(|mut f| f.read(&mut head)) else { return false };
+    let head = &head[..n];
+    head.starts_with(b"\x89PNG") || head.starts_with(&[0, 0, 1, 0]) || head.starts_with(&[0xff, 0xd8])
+        || head.starts_with(b"GIF8") || (head.starts_with(b"RIFF") && head.ends_with(b"WEBP")) || head.starts_with(b"BM")
+}
+
+/// A site's icon, for a quicklink's row. The site itself is asked first, so a link's host is
+/// only told to a third party (DuckDuckGo's icon service) when the site has no `favicon.ico`.
+pub fn favicon(host: &str) -> Option<PathBuf> {
+    let name = format!("favicon:{host}");
+    let path = dir().join(key(&name));
+    if path.is_file() {
+        return std::fs::metadata(&path).is_ok_and(|m| m.len() > 0).then_some(path);
+    }
+    let mut guard = IN_FLIGHT.lock().ok()?;
+    if !guard.get_or_insert_with(HashSet::new).insert(name) {
+        return None;
+    }
+    let (host, target) = (host.to_string(), path);
+    std::thread::spawn(move || {
+        let tmp = target.with_extension("part");
+        let sources = [format!("https://{host}/favicon.ico"), format!("https://icons.duckduckgo.com/ip3/{host}.ico")];
+        let found = sources.iter().any(|url| {
+            std::process::Command::new("curl")
+                .args(["-sfL", "--max-time", "10", "--max-filesize", "2000000", "-A", "Mozilla/5.0 (X11; Linux x86_64) EchoSpot", "-o"]).arg(&tmp).arg(url)
+                .status().is_ok_and(|s| s.success()) && is_picture(&tmp)
+        });
+        if found {
+            let _ = std::fs::rename(&tmp, &target);
+        } else {
+            let _ = std::fs::remove_file(&tmp);
+            let _ = std::fs::write(&target, b"");
+        }
+        DIRTY.store(true, Ordering::SeqCst);
+        if let Some(waker) = WAKER.get() {
+            waker();
+        }
+    });
+    None
+}
+
 /// GETs a URL and returns its body. Blocking: call from a worker.
 pub fn get(url: &str) -> Option<String> {
     util::output("curl", &["-sL", "--max-time", "20", "-A", "Mozilla/5.0 (X11; Linux x86_64) EchoSpot", url])
