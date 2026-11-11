@@ -3,7 +3,7 @@
 //! fallbacks trailing.
 
 use crate::app::{App, Built};
-use crate::features::{calc, fuzzy, system, windows};
+use crate::features::{calc, fuzzy, quicklinks, system, windows};
 use crate::icons;
 use crate::model::*;
 use crate::util;
@@ -127,9 +127,16 @@ fn entries(app: &App) -> Vec<Entry> {
     }
     for q in &app.quicklinks.list {
         let id = format!("ql:{}", q.id);
-        let item = Item::new(id.clone(), q.name.clone(), IconSrc::Glyph(&icons::LINK)).trailing("Quicklink")
+        // Two links may share a name (a site and a search of it): the host tells them apart.
+        let mut item = Item::new(id.clone(), q.name.clone(), quicklinks::icon(&q.link)).trailing("Quicklink")
             .action(Action::new("Open Quicklink", &icons::ARROW_UP_RIGHT, Act::Quicklink(QuicklinkOp::Open(q.id.clone(), String::new()))))
-            .action(favorite_action(app, &id));
+            .action(Action::new("Copy Link", &icons::COPY, Act::Copy(q.link.clone())).keys("ctrl+shift+c"))
+            .action(favorite_action(app, &id))
+            .action(Action::new("Edit Quicklink", &icons::PENCIL, Act::Quicklink(QuicklinkOp::Edit(q.id.clone()))).keys("ctrl+e").section(""));
+        item.subtitle = quicklinks::host(&q.link).map(|h| {
+            let h = h.trim_start_matches("www.");
+            if quicklinks::takes_query(&q.link) { format!("Search {h}") } else { h.to_string() }
+        });
         out.push(Entry { item, keywords: format!("{} {}", q.alias, q.link) });
     }
     for s in &app.snippets.list {
@@ -143,15 +150,17 @@ fn entries(app: &App) -> Vec<Entry> {
     out
 }
 
-fn fallbacks(app: &App, query: &str) -> Vec<Item> {
+/// What a query can be handed to when nothing above is what was meant. `shown` holds the ids of
+/// the rows already in the results, so a quicklink the query found by name isn't offered twice.
+fn fallbacks(app: &App, query: &str, shown: &std::collections::HashSet<String>) -> Vec<Item> {
     let mut out = vec![
         Item::new("fb:ai", "Quick AI", IconSrc::Glyph(&icons::SPARKLES)).trailing("Command")
             .action(Action::new("Ask AI", &icons::SPARKLES, Act::Ai(AiOp::Open(query.into())))),
         Item::new("fb:files", "Search Files", IconSrc::Glyph(&icons::FILE_SEARCH)).trailing("Command")
             .action(Action::new("Search Files", &icons::FILE_SEARCH, Act::PushQuery(Route::Files, query.into()))),
     ];
-    for q in app.quicklinks.list.iter().filter(|q| q.link.contains("{query}") || q.link.contains("{argument}")) {
-        out.push(Item::new(format!("fb:ql:{}", q.id), format!("Search {}", q.name), IconSrc::Glyph(&icons::GLOBE)).trailing("Quicklink")
+    for q in app.quicklinks.list.iter().filter(|q| quicklinks::takes_query(&q.link) && !shown.contains(&format!("ql:{}", q.id))) {
+        out.push(Item::new(format!("fb:ql:{}", q.id), format!("Search {}", q.name), quicklinks::icon(&q.link)).trailing("Quicklink")
             .action(Action::new("Open in Browser", &icons::ARROW_UP_RIGHT, Act::Quicklink(QuicklinkOp::Open(q.id.clone(), query.into())))));
     }
     out
@@ -207,8 +216,10 @@ pub fn build(app: &App, query: &str) -> Built {
         Some((score + (boost * 12.0) as i32 + if app.usage.is_favorite(&e.item.id) { 20 } else { 0 }, boost, e.item))
     }).collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.total_cmp(&a.1)).then(a.2.title.len().cmp(&b.2.title.len())));
-    sections.push("Results", scored.into_iter().take(60).map(|(_, _, item)| item).collect());
-    sections.push(&format!("Use “{}” with…", util::truncate(q, 28)), fallbacks(app, q));
+    let results: Vec<Item> = scored.into_iter().take(60).map(|(_, _, item)| item).collect();
+    let shown = results.iter().map(|i| i.id.clone()).collect();
+    sections.push("Results", results);
+    sections.push(&format!("Use “{}” with…", util::truncate(q, 28)), fallbacks(app, q, &shown));
     Built::list(sections, "Search for apps and commands...")
 }
 
