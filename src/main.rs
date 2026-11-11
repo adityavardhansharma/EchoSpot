@@ -136,10 +136,10 @@ fn main() {
     });
     let settings_spec = AppSpec::<settings_ui::SettingsUi> {
         on_key: Some(settings_ui::on_key),
-        min_size: Some((640.0, 420.0)),
+        min_size: Some((0.0, 0.0)),
         ..AppSpec::new(settings_ui::TITLE, settings_ui::SIZE, settings_ui::SettingsUi::new, settings_ui::view)
     };
-    let hidden = WindowOptions { visible: false, ..Default::default() };
+    let hidden = WindowOptions { transparent: true, borderless: true, resizable: false, visible: false, min_size: Some((0.0, 0.0)), ..Default::default() };
     let (settings_handle, settings_window) = app.window(rune::WindowSpec::new("settings", settings_spec).options(hidden));
     settings_ui::attach(settings_handle, settings_window, handle.clone());
     if !headless {

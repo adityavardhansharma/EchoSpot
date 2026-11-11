@@ -1,17 +1,23 @@
-//! The Settings window: a sidebar of panes over grouped cards. Every control writes
-//! `settings.json` at once and tells the palette, so nothing waits for a Save button.
+//! The Settings window. It is the palette's own material and vocabulary: the same blurred glass
+//! panel, the same rows and tiles in its sidebar, the same floating glass pill at its foot.
+//! Every control writes `settings.json` at once and tells the palette, so nothing waits for Save.
 
 use std::sync::OnceLock;
 
-use rune::{AppHandle, Color, Cx, El, ScrollSpec, TextEdit, Tx, WindowHandle, col, el, icon, row, spacer, text, text_input};
+use rune::{AppHandle, Color, Cx, El, ScrollFade, ScrollSpec, TextEdit, Tx, WindowHandle, col, el, row, spacer, text, text_input};
 
 use crate::app::App;
 use crate::icons;
 use crate::settings::Settings;
-use crate::theme::{self, Palette, motion, radius, space, type_};
+use crate::theme::{self, Palette, Tint, motion, radius, size, space, type_};
+use crate::ui;
 
 pub const TITLE: &str = "EchoSpot Settings";
-pub const SIZE: (f32, f32) = (820.0, 560.0);
+/// The panel, and the window around it: the palette's margin, where the shadow falls.
+pub const PANEL: (f32, f32) = (780.0, 540.0);
+pub const SIZE: (f32, f32) = (PANEL.0 + size::WINDOW_MARGIN * 2.0, PANEL.1 + size::WINDOW_MARGIN * 2.0);
+const SIDEBAR_W: f32 = 204.0;
+const FULL: Option<f32> = Some(0.0);
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Pane {
@@ -22,12 +28,12 @@ pub enum Pane {
     About,
 }
 
-const PANES: [(Pane, &str, &rune::Icon, &str); 5] = [
-    (Pane::General, "General", &icons::GEAR, "#8e8e93"),
-    (Pane::Clipboard, "Clipboard", &icons::CLIPBOARD, "#ff9f0a"),
-    (Pane::Ai, "AI", &icons::SPARKLES, "#bf5af2"),
-    (Pane::Extensions, "Extensions", &icons::PUZZLE, "#0a84ff"),
-    (Pane::About, "About", &icons::INFO, "#30d158"),
+const PANES: [(Pane, &str, &rune::Icon, Tint); 5] = [
+    (Pane::General, "General", &icons::GEAR, Tint::Graphite),
+    (Pane::Clipboard, "Clipboard", &icons::CLIPBOARD, Tint::Orange),
+    (Pane::Ai, "AI", &icons::AI, Tint::Violet),
+    (Pane::Extensions, "Extensions", &icons::PUZZLE, Tint::Green),
+    (Pane::About, "About", &icons::LOGO, Tint::Indigo),
 ];
 
 pub struct SettingsUi {
@@ -40,6 +46,9 @@ pub struct SettingsUi {
     pub extensions: Vec<(String, String, usize)>,
     pub clipboard_count: usize,
     pub note: String,
+    /// The screen behind the panel, captured as the window opens.
+    backdrop: rune::Pixels,
+    has_backdrop: bool,
 }
 
 impl SettingsUi {
@@ -47,6 +56,7 @@ impl SettingsUi {
         let mut ui = Self {
             pane: Pane::General, settings: Settings::load(), model: TextEdit::new(""), base_url: TextEdit::new(""),
             api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), clipboard_count: 0, note: String::new(),
+            backdrop: rune::Pixels::new(), has_backdrop: false,
         };
         ui.reload();
         ui
@@ -62,6 +72,29 @@ impl SettingsUi {
         self.extensions = crate::ext::Extensions::load().installed.iter().map(|e| (e.id.clone(), e.title.clone(), e.commands.len())).collect();
         self.clipboard_count = crate::features::clipboard::Clipboard::load().entries.len();
         self.note.clear();
+    }
+
+    /// Takes the patch of screen the window is about to cover, as the palette does when summoned.
+    fn capture(&mut self) {
+        self.has_backdrop = false;
+        if self.settings.backdrop != "capture" {
+            return;
+        }
+        let shot = crate::backdrop::centered_origin(SIZE.0, SIZE.1)
+            .and_then(|(x, y)| crate::backdrop::capture_rect(x + size::WINDOW_MARGIN, y + size::WINDOW_MARGIN, PANEL.0, PANEL.1));
+        if let Some((w, h, rgba)) = shot {
+            self.backdrop.set(w, h, rgba);
+            self.has_backdrop = true;
+        }
+    }
+
+    fn editing(&self) -> bool {
+        self.model.focused || self.base_url.focused || self.api_key.focused || self.system_prompt.focused
+    }
+
+    fn step_pane(&mut self, delta: i32) {
+        let at = PANES.iter().position(|(pane, ..)| *pane == self.pane).unwrap_or(0) as i32;
+        self.pane = PANES[(at + delta).clamp(0, PANES.len() as i32 - 1) as usize].0;
     }
 
     /// Saves and hands the palette the new settings.
@@ -102,6 +135,7 @@ pub fn open(pane: &str) {
     };
     handle.update(move |ui, _| {
         ui.reload();
+        ui.capture();
         if let Some(pane) = pane {
             ui.pane = pane;
         }
@@ -121,25 +155,27 @@ fn switch(p: &Palette, key: &str, on: bool, toggle: impl Fn(&mut Settings) + 'st
 }
 
 fn segmented(p: &Palette, key: &str, options: &[(&str, &str)], current: &str, set: fn(&mut Settings, &str)) -> El {
-    let mut control = row().key(key.to_string()).h(28.0).padding(2.0).radius(radius::BAR_CONTROL).fill(p.control_surface);
+    let mut control = row().key(key.to_string()).h(size::BAR_BUTTON_H).padding(2.0).radius(size::BAR_BUTTON_H / 2.0)
+        .fill(p.control_surface).border(1.0, p.border.alpha(0.10));
     for (value, label) in options {
         let on = *value == current;
         let value = value.to_string();
-        control = control.child(row().key(format!("{key}-{value}")).h(24.0).px(space::XL).center().radius(radius::BAR_CONTROL - 2.0)
+        control = control.child(row().key(format!("{key}-{value}")).h(size::BAR_BUTTON_H - 4.0).px(space::XL).center().radius(size::BAR_BUTTON_H / 2.0 - 2.0)
             .fill(if on { p.control_pressed } else { Color::TRANSPARENT }).hover(if on { Color::TRANSPARENT } else { p.row_hover }).motion(motion::HOVER)
             .on_press(move |ui: &mut SettingsUi| {
                 set(&mut ui.settings, &value);
                 ui.commit();
             })
-            .child(text(label.to_string()).font(type_::ROW_TRAILING).color(if on { p.text } else { p.text_secondary })));
+            .child(text(label.to_string()).font(type_::BAR).color(if on { p.text } else { p.text_secondary })));
     }
     control
 }
 
 fn button(p: &Palette, key: &str, label: &str, destructive: bool, press: impl Fn(&mut SettingsUi, &mut Tx) + 'static) -> El {
-    row().key(key.to_string()).h(28.0).px(space::XL).center().radius(radius::BAR_CONTROL).fill(p.control_surface)
-        .hover(p.row_hover).press(p.control_pressed).on_press_tx(press)
-        .child(text(label.to_string()).font(type_::ROW_TRAILING).color(if destructive { p.destructive } else { p.text }))
+    row().key(key.to_string()).h(size::BAR_BUTTON_H).px(space::XL).center().radius(size::BAR_BUTTON_H / 2.0)
+        .fill(p.control_surface).border(1.0, p.border.alpha(0.10))
+        .hover(p.control_hover).press(p.control_pressed).motion(motion::HOVER).on_press_tx(press)
+        .child(text(label.to_string()).font(type_::BAR).color(if destructive { p.destructive } else { p.text.alpha(0.92) }))
 }
 
 /// A row of a card: a title with its quieter subtitle, and a control at the trailing edge.
@@ -152,7 +188,7 @@ fn setting(p: &Palette, title: &str, subtitle: &str, control: El) -> El {
 }
 
 fn card(p: &Palette, title: &str, rows: Vec<El>) -> El {
-    let mut body = col().w_full().radius(radius::CARD).fill(p.card_fill).border(1.0, p.card_stroke);
+    let mut body = col().w_full().radius(radius::FORM_FIELD).fill(p.card_fill).border(1.0, p.card_stroke);
     for (i, r) in rows.into_iter().enumerate() {
         if i > 0 {
             body = body.child(el().w_full().px(space::XL + 2.0).child(el().w_full().h(1.0).fill(p.separator)));
@@ -161,15 +197,15 @@ fn card(p: &Palette, title: &str, rows: Vec<El>) -> El {
     }
     let mut group = col().w_full().gap(space::SM);
     if !title.is_empty() {
-        group = group.child(text(title.to_string()).font(type_::SECTION).color(p.text_secondary).ml(space::XS));
+        group = group.child(text(title.to_string()).font(type_::SECTION).color(p.text_secondary).ml(space::MD));
     }
     group.child(body)
 }
 
 fn field(p: &Palette, key: &str, edit: &TextEdit, placeholder: &str, access: fn(&mut SettingsUi) -> &mut TextEdit, width: f32) -> El {
     let focused = edit.focused;
-    row().key(format!("{key}-box")).w(width).h(28.0).px(space::LG).center_y().radius(radius::BAR_CONTROL).fill(p.card_fill)
-        .border(if focused { 2.0 } else { 1.0 }, if focused { p.border.alpha(0.5) } else { p.card_stroke })
+    row().key(format!("{key}-box")).w(width).h(30.0).px(space::XL).center_y().radius(radius::ROW).fill(p.card_fill)
+        .border(if focused { 2.0 } else { 1.0 }, if focused { p.border.alpha(0.45) } else { p.card_stroke })
         .child(text_input(edit, type_::ROW_TITLE).key(key.to_string()).single_line().grow(1.0).color(p.text)
             .placeholder(placeholder.to_string(), p.text_tertiary).no_focus_ring()
             .on_edit(access)
@@ -241,7 +277,7 @@ fn ai(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         card(p, "Instructions", vec![
             col().w_full().px(space::XL + 2.0).py(space::LG).gap(space::MD)
                 .child(text("System prompt").font(type_::ROW_TITLE).color(p.text))
-                .child(col().key("system-box").w_full().min_h(84.0).px(space::LG).py(space::MD).radius(radius::BAR_CONTROL).fill(p.card_fill).border(1.0, p.card_stroke)
+                .child(col().key("system-box").w_full().min_h(84.0).px(space::LG).py(space::MD).radius(radius::ROW).fill(p.card_fill).border(1.0, p.card_stroke)
                     .child(text_input(&ui.system_prompt, type_::ROW_TITLE).key("system-prompt").w_full().grow(1.0).color(p.text)
                         .placeholder("Leave empty for EchoSpot's own: short, direct answers.", p.text_tertiary).no_focus_ring()
                         .on_edit(|ui: &mut SettingsUi| &mut ui.system_prompt)
@@ -283,12 +319,11 @@ fn extensions(ui: &SettingsUi, p: &Palette) -> Vec<El> {
     ]
 }
 
-fn about(_ui: &SettingsUi, p: &Palette) -> Vec<El> {
+fn about(_: &SettingsUi, p: &Palette) -> Vec<El> {
     let link = |label: &'static str, url: &'static str| button(p, label, label, false, move |_, _| crate::util::open_url(url));
     vec![
         col().w_full().items_center().gap(space::MD).py(space::XXL)
-            .child(el().size(72.0, 72.0).radius(18.0).fill(rune::color::hex("#8a5cff").unwrap_or(Color::WHITE)).center()
-                .child(icon(&icons::BOLT, 38.0).color(Color::WHITE)))
+            .child(ui::badge_tile(&icons::LOGO, 76.0, Tint::Violet))
             .child(text("EchoSpot").font(type_::TITLE2).color(p.text))
             .child(text(format!("Version {}", env!("CARGO_PKG_VERSION"))).font(type_::ROW_TRAILING).color(p.text_secondary))
             .child(text("A native command palette for Hyprland, drawn with Rune.").font(type_::ROW_TRAILING).color(p.text_tertiary)),
@@ -302,23 +337,42 @@ fn about(_ui: &SettingsUi, p: &Palette) -> Vec<El> {
     ]
 }
 
-pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
-    let p = theme::palette(ui.settings.dark(cx.system_dark()));
-    let bg = if p.dark { rune::color::hex("#1c1c1e") } else { rune::color::hex("#f2f2f7") }.unwrap_or(Color::BLACK);
-    let side_bg = if p.dark { rune::color::hex("#232325") } else { rune::color::hex("#e9e9ee") }.unwrap_or(Color::BLACK);
-
-    let mut sidebar = col().key("sidebar").w(200.0).h_full().padding(space::LG).gap(space::XXS).fill(side_bg)
-        .child(text("Settings").font(type_::PANEL_TITLE).color(p.text).ml(space::MD).mt(space::SM).mb(space::LG));
+fn sidebar(ui: &SettingsUi, p: &Palette) -> El {
+    // The brand row stands where the palette's search field does, and moves the window.
+    let brand = row().key("brand").w_full().h(size::HEADER_BAND).px(space::MD).gap(space::LG).center_y().window_drag()
+        .child(ui::badge_tile(&icons::LOGO, size::RESULT_ROW_ICON, Tint::Violet))
+        .child(text("EchoSpot").font(type_::PANEL_TITLE).color(p.text));
+    let mut list = col().w_full().gap(space::XXS)
+        .child(row().w_full().px(space::MD).pt(space::XS).pb(space::SECTION_HEADER_BOTTOM)
+            .child(text("Settings").font(type_::SECTION).color(p.text_secondary)));
     for (pane, title, glyph, tint) in PANES {
         let on = ui.pane == pane;
-        sidebar = sidebar.child(row().key(format!("pane-{title}")).w_full().h(32.0).px(space::MD).gap(space::LG).center_y().radius(radius::BAR_CONTROL)
-            .fill(if on { p.selection } else { Color::TRANSPARENT }).hover(if on { Color::TRANSPARENT } else { p.row_hover }).motion(motion::HOVER)
-            .on_press(move |ui: &mut SettingsUi| ui.pane = pane)
-            .child(el().size(20.0, 20.0).radius(6.0).fill(rune::color::hex(tint).unwrap_or(Color::WHITE)).center().child(icon(glyph, 13.0).color(Color::WHITE)))
+        let item = row().key(format!("pane-{title}")).w_full().px(space::MD).py(space::SM).gap(space::LG).center_y().radius(radius::ROW);
+        let item = if on { item.fill(p.selection) } else { item.fill(Color::TRANSPARENT).hover(p.row_hover) };
+        list = list.child(item.motion(motion::HOVER).on_press(move |ui: &mut SettingsUi| ui.pane = pane)
+            .child(ui::badge_tile(glyph, size::RESULT_ROW_ICON, tint))
             .child(text(title).font(type_::ROW_TITLE).color(p.text)));
     }
-    sidebar = sidebar.child(spacer());
+    col().key("sidebar").w(SIDEBAR_W).h_full().px(space::MD).child(brand).child(list)
+}
 
+fn foot(p: &Palette) -> El {
+    let done = row().key("done").h(size::BAR_BUTTON_H).px(space::MD).gap(space::SM).center_y().radius(size::BAR_BUTTON_H / 2.0)
+        .hover(p.row_hover).press(p.control_surface).motion(motion::HOVER)
+        .on_press_tx(|_: &mut SettingsUi, tx| tx.close_window())
+        .child(text("Done").font(rune::TextStyle::new(12.0, 600.0).lh(16.0)).color(p.text))
+        .child(ui::keycap(p, "esc", false));
+    let file = row().key("open-config").h(size::BAR_BUTTON_H).px(space::MD).gap(space::SM).center_y().radius(size::BAR_BUTTON_H / 2.0)
+        .hover(p.row_hover).press(p.control_surface).motion(motion::HOVER)
+        .on_press(|_: &mut SettingsUi| { crate::util::spawn_detached(&["xdg-open".into(), Settings::path().display().to_string()]); })
+        .child(text("Open settings.json").font(type_::BAR).color(p.text.alpha(0.86)));
+    let group = row().key("foot-actions").h(size::MENU_BUTTON).px(space::XS).center_y().child(file).child(done);
+    row().key("foot").pin(FULL, None, FULL, FULL).h(size::BOTTOM_BAR_H).px(space::MD).center_y()
+        .child(spacer()).child(ui::glass(group, p, size::MENU_BUTTON / 2.0))
+}
+
+pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
+    let p = theme::palette(ui.settings.dark(cx.system_dark()));
     let (title, cards) = match ui.pane {
         Pane::General => ("General", general(ui, &p)),
         Pane::Clipboard => ("Clipboard", clipboard(ui, &p)),
@@ -326,22 +380,35 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
         Pane::Extensions => ("Extensions", extensions(ui, &p)),
         Pane::About => ("About", about(ui, &p)),
     };
-    let mut content = col().w_full().px(space::XXL + space::XS).pt(space::XXL).pb(space::XXL + space::XL).gap(space::XXL)
-        .child(text(title).font(type_::TITLE2).color(p.text));
+    let mut content = col().w_full().px(space::XXL).pt(space::XS).pb(size::BOTTOM_BAR_H + space::XL).gap(space::XXL - 2.0);
     for c in cards {
         content = content.child(c);
     }
     if !ui.note.is_empty() {
-        content = content.child(text(ui.note.clone()).font(type_::ROW_TRAILING).color(p.text_secondary));
+        content = content.child(text(ui.note.clone()).font(type_::ROW_TRAILING).color(p.text_secondary).ml(space::MD));
     }
-    let detail = col().key("detail").grow(1.0).h_full().min_h(0.0)
-        .child(col().w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(20.0).child(content));
-    row().w_full().h_full().fill(bg).child(sidebar).child(el().w(1.0).h_full().fill(p.separator)).child(detail)
+    let fade = ScrollFade::strength(size::DISSOLVE_TOP).full_at(4.0).with_end(ScrollFade::strength(size::DISSOLVE_BOTTOM));
+    // The pane's name is set as the palette sets what is typed, and the band it sits in moves
+    // the window.
+    let heading = row().key("heading").w_full().h(size::HEADER_BAND).px(space::XXL + space::MD).center_y().window_drag()
+        .child(text(title).font(type_::SEARCH).color(p.text));
+    let detail = col().key("detail").grow(1.0).h_full().min_h(0.0).child(heading)
+        .child(col().key("settings-scroll").w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_fade(fade).child(content));
+    // The one hairline: between the list and what it selects, as in the palette's split views.
+    let rule = col().h_full().pt(size::HEADER_BAND).pb(size::BOTTOM_BAR_H).child(el().w(size::HAIRLINE).grow(1.0).fill(p.separator));
+    let panel = ui::panel_surface("settings-panel", &p, PANEL, ui.has_backdrop.then_some(&ui.backdrop), &ui.settings.backdrop)
+        .child(row().pin(FULL, FULL, FULL, FULL).child(sidebar(ui, &p)).child(rule).child(detail))
+        .child(foot(&p))
+        .child(ui::panel_rim(&p));
+    el().w_full().h_full().child(panel)
 }
 
-pub fn on_key(_ui: &mut SettingsUi, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
+pub fn on_key(ui: &mut SettingsUi, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         rune::Key::Escape | rune::Key::Command('w') => tx.close_window(),
+        rune::Key::Down if !ui.editing() => ui.step_pane(1),
+        rune::Key::Up if !ui.editing() => ui.step_pane(-1),
+        rune::Key::Command(c @ '1'..='5') => ui.pane = PANES[c as usize - '1' as usize].0,
         _ => return false,
     }
     true
