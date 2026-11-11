@@ -730,13 +730,9 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                             Some("ANIMATED") => Tone::Progress,
                             _ => Tone::Success,
                         };
-                        app.toast(if body.is_empty() { title } else { format!("{title} · {body}") }, tone);
-                        if tone == Tone::Progress {
-                            // A spinner stays until the command replaces or hides it.
-                            if let Some(toast) = &mut app.toast {
-                                toast.until = f64::MAX;
-                            }
-                        }
+                        let text = if body.is_empty() { title } else { format!("{title} · {body}") };
+                        // A spinner stays until the command replaces or hides it.
+                        if tone == Tone::Progress { app.toast_progress(text) } else { app.toast(text, tone) }
                     }
                     "hideToast" => app.toast = None,
                     "hud" => {

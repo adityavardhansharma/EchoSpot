@@ -49,8 +49,9 @@ fn poll(s: &mut App, clock: f64, tx: &mut Tx) -> bool {
         if clock >= toast.until {
             s.toast = None;
             changed = true;
-        } else {
-            tx.wake_after(std::time::Duration::from_secs_f64((toast.until - clock).max(0.05)));
+        } else if toast.until.is_finite() {
+            // A progress toast has no deadline: whatever replaces it wakes the window.
+            tx.wake_after(std::time::Duration::from_secs_f64((toast.until - clock).clamp(0.05, 3600.0)));
         }
     }
     changed

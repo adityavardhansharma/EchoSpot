@@ -279,6 +279,11 @@ impl App {
         self.toast = Some(Toast { text: text.into(), tone, until: self.clock + crate::theme::duration::MESSAGE_HUD });
     }
 
+    /// A toast that stays until something replaces it: an install, a command still running.
+    pub fn toast_progress(&mut self, text: impl Into<String>) {
+        self.toast = Some(Toast { text: text.into(), tone: Tone::Progress, until: f64::INFINITY });
+    }
+
     pub fn select(&mut self, index: usize, tx: &mut Tx) {
         let screen = self.top_mut();
         if screen.items.is_empty() {

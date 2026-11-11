@@ -237,10 +237,7 @@ pub fn install(app: &mut App, listing: Listing) {
         return app.toast("An install is already running", Tone::Neutral);
     }
     app.ext.store.installing = Some(listing.id());
-    app.toast(format!("Installing {}…", listing.title), Tone::Progress);
-    if let Some(toast) = &mut app.toast {
-        toast.until = f64::MAX;
-    }
+    app.toast_progress(format!("Installing {}…", listing.title));
     app.ext.store.installs.request(listing, |l| download(&l));
     app.refresh_keeping();
 }
