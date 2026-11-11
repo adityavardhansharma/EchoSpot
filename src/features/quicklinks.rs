@@ -114,7 +114,7 @@ pub fn build(app: &App, query: &str) -> Built {
     scored.sort_by(|a, b| b.0.cmp(&a.0));
     let mut sections = Sections::default();
     sections.push("Quicklinks", scored.into_iter().map(|(_, i)| i).collect());
-    sections.push("", vec![Item::new("quicklink:new", "Create Quicklink", IconSrc::Glyph(&icons::PLUS)).trailing("Command")
+    sections.push("", vec![Item::new("quicklink:new", "Create Quicklink", IconSrc::Badge(&icons::PLUS, crate::theme::Tint::Teal)).trailing("Command")
         .action(Action::new("Create Quicklink", &icons::PLUS, Act::Quicklink(QuicklinkOp::New)))]);
     Built::list(sections, "Search quicklinks...").keep()
 }

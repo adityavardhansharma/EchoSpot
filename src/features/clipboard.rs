@@ -13,6 +13,7 @@ use crate::app::{App, Built, Tone};
 use crate::features::fuzzy;
 use crate::icons;
 use crate::model::*;
+use crate::theme::Tint;
 use crate::util;
 
 const MAX_ENTRIES: usize = 500;
@@ -271,11 +272,11 @@ fn item(app: &App, e: &Entry) -> Item {
         Kind::Color => {
             let color = parse_color(&e.text);
             detail.swatch = color;
-            (e.text.trim().to_uppercase(), color.map(IconSrc::Swatch).unwrap_or(IconSrc::Glyph(&icons::PALETTE)), "Color")
+            (e.text.trim().to_uppercase(), color.map(IconSrc::Swatch).unwrap_or(IconSrc::Badge(&icons::PALETTE, Tint::Pink)), "Color")
         }
         Kind::Link => {
             detail.text = Some(e.text.clone());
-            (first_line.to_string(), IconSrc::Glyph(&icons::LINK), "Link")
+            (first_line.to_string(), IconSrc::Badge(&icons::LINK, Tint::Blue), "Link")
         }
         Kind::File => {
             let path = PathBuf::from(first_line.trim_start_matches("file://"));
@@ -287,13 +288,13 @@ fn item(app: &App, e: &Entry) -> Item {
                 detail.text = Some(e.text.clone());
             }
             let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| first_line.to_string());
-            (name, if is_image { IconSrc::File(path) } else { IconSrc::Glyph(&icons::FILE) }, "File")
+            (name, if is_image { IconSrc::File(path) } else { IconSrc::Badge(&icons::FILE, Tint::Teal) }, "File")
         }
         Kind::Text => {
             detail.text = Some(util::truncate(&e.text, 6000));
             detail.fields.push(("Characters".into(), e.text.chars().count().to_string()));
             detail.fields.push(("Words".into(), e.text.split_whitespace().count().to_string()));
-            (util::truncate(first_line, 80), IconSrc::Glyph(&icons::FILE_TEXT), "Text")
+            (util::truncate(first_line, 80), IconSrc::Badge(&icons::TEXT, Tint::Graphite), "Text")
         }
     };
     detail.fields.push(("Type".into(), kind_name.into()));

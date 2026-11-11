@@ -9,6 +9,7 @@ use rune::Latest;
 use crate::app::{App, Built};
 use crate::icons;
 use crate::model::*;
+use crate::theme::Tint;
 use crate::util;
 
 #[derive(Default)]
@@ -84,20 +85,21 @@ fn regex_escape(s: &str) -> String {
     s.chars().flat_map(|c| if "\\.+*?()|[]{}^$".contains(c) { vec!['\\', c] } else { vec![c] }).collect()
 }
 
-fn kind_of(path: &Path) -> (&'static str, &'static rune::Icon) {
+/// What a file is, the glyph that says so, and the colour family its tile wears.
+fn kind_of(path: &Path) -> (&'static str, &'static rune::Icon, Tint) {
     if path.is_dir() {
-        return ("Folder", &icons::FOLDER);
+        return ("Folder", &icons::FOLDER, Tint::Blue);
     }
     match path.extension().and_then(|e| e.to_str()).map(|e| e.to_lowercase()).as_deref() {
-        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "heic") => ("Image", &icons::IMAGE),
-        Some("pdf") => ("PDF Document", &icons::FILE_TEXT),
-        Some("md" | "txt" | "rtf" | "log") => ("Text", &icons::FILE_TEXT),
-        Some("rs" | "js" | "ts" | "tsx" | "jsx" | "py" | "go" | "c" | "h" | "cpp" | "java" | "rb" | "sh" | "lua" | "swift" | "kt" | "zig" | "css" | "html") => ("Source Code", &icons::CODE),
-        Some("json" | "toml" | "yaml" | "yml" | "xml" | "ini" | "conf") => ("Configuration", &icons::GEAR),
-        Some("mp3" | "flac" | "wav" | "ogg" | "m4a" | "opus") => ("Audio", &icons::MUSIC),
-        Some("mp4" | "mkv" | "mov" | "webm" | "avi") => ("Video", &icons::PLAY),
-        Some("zip" | "tar" | "gz" | "xz" | "zst" | "7z" | "rar") => ("Archive", &icons::BOX),
-        _ => ("Document", &icons::FILE),
+        Some("png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp" | "avif" | "heic") => ("Image", &icons::IMAGE, Tint::Pink),
+        Some("pdf") => ("PDF Document", &icons::FILE_TEXT, Tint::Red),
+        Some("md" | "txt" | "rtf" | "log") => ("Text", &icons::FILE_TEXT, Tint::Graphite),
+        Some("rs" | "js" | "ts" | "tsx" | "jsx" | "py" | "go" | "c" | "h" | "cpp" | "java" | "rb" | "sh" | "lua" | "swift" | "kt" | "zig" | "css" | "html") => ("Source Code", &icons::CODE, Tint::Teal),
+        Some("json" | "toml" | "yaml" | "yml" | "xml" | "ini" | "conf") => ("Configuration", &icons::GEAR, Tint::Indigo),
+        Some("mp3" | "flac" | "wav" | "ogg" | "m4a" | "opus") => ("Audio", &icons::MUSIC, Tint::Orange),
+        Some("mp4" | "mkv" | "mov" | "webm" | "avi") => ("Video", &icons::PLAY, Tint::Violet),
+        Some("zip" | "tar" | "gz" | "xz" | "zst" | "7z" | "rar") => ("Archive", &icons::BOX, Tint::Yellow),
+        _ => ("Document", &icons::FILE, Tint::Graphite),
     }
 }
 
@@ -107,14 +109,14 @@ fn is_text(path: &Path) -> bool {
 
 fn item(path: &Path) -> Item {
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.display().to_string());
-    let (kind, glyph) = kind_of(path);
+    let (kind, glyph, tint) = kind_of(path);
     let meta = std::fs::metadata(path).ok();
     let mut detail = Detail { heading: Some("Information".into()), ..Default::default() };
     let icon = if kind == "Image" {
         detail.image = Some(path.to_path_buf());
         IconSrc::File(path.to_path_buf())
     } else {
-        IconSrc::Glyph(glyph)
+        IconSrc::Badge(glyph, tint)
     };
     if is_text(path) && meta.as_ref().is_some_and(|m| m.len() < 2_000_000) {
         detail.text = std::fs::read(path).ok().map(|bytes| {

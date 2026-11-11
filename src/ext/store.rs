@@ -158,9 +158,9 @@ pub fn installed(app: &App, query: &str) -> Built {
         }).collect();
     sections.push("Installed", items);
     sections.push("Get More", vec![
-        Item::new("installed:store", "Browse the Store", IconSrc::Glyph(&icons::STORE)).trailing("Command")
+        Item::new("installed:store", "Browse the Store", IconSrc::Badge(&icons::STORE, crate::theme::Tint::Cyan)).trailing("Command")
             .action(Action::new("Open Store", &icons::STORE, Act::Push(Route::Store))),
-        Item::new("installed:demo", "Install Demo Extension", IconSrc::Glyph(&icons::BOX)).trailing("Command")
+        Item::new("installed:demo", "Install Demo Extension", IconSrc::Badge(&icons::BOX, crate::theme::Tint::Green)).trailing("Command")
             .action(Action::new("Install", &icons::DOWNLOAD, Act::Ext(ExtAct::InstallDemo))),
     ]);
     Built::list(sections, "Search installed extensions...").keep()

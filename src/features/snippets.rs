@@ -67,7 +67,7 @@ pub fn build(app: &App, query: &str) -> Built {
             detail.fields.push(("Keyword".into(), s.keyword.clone()));
         }
         detail.fields.push(("Characters".into(), s.text.chars().count().to_string()));
-        let item = Item::new(format!("snippet:{}", s.id), s.name.clone(), IconSrc::Glyph(&icons::TEXT))
+        let item = Item::new(format!("snippet:{}", s.id), s.name.clone(), IconSrc::Badge(&icons::TEXT, crate::theme::Tint::Red))
             .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(expand(&s.text))))
             .action(Action::new("Copy to Clipboard", &icons::COPY, Act::Copy(expand(&s.text))).keys("ctrl+enter"))
             .action(Action::new("Edit Snippet", &icons::PENCIL, Act::Snippet(SnippetOp::Edit(s.id.clone()))).keys("ctrl+e").section(""))
@@ -83,7 +83,7 @@ pub fn build(app: &App, query: &str) -> Built {
     let mut sections = Sections::default();
     sections.push("Snippets", scored.into_iter().map(|(_, i)| i).collect());
     if app.snippets.list.is_empty() {
-        sections.push("", vec![Item::new("snippet:new", "Create Snippet", IconSrc::Glyph(&icons::PLUS)).trailing("Command")
+        sections.push("", vec![Item::new("snippet:new", "Create Snippet", IconSrc::Badge(&icons::PLUS, crate::theme::Tint::Red)).trailing("Command")
             .action(Action::new("Create Snippet", &icons::PLUS, Act::Snippet(SnippetOp::New)))]);
     }
     Built::list(sections, "Search snippets...").layout(if app.snippets.list.is_empty() { Layout::List } else { Layout::Split }).keep()
