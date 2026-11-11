@@ -112,9 +112,11 @@ fn section_header(p: &Palette, title: &str, count: Option<usize>, first: bool) -
     header
 }
 
-/// Selection always beats hover: a selected row paints one fill and no hover over it.
+/// Selection always beats hover: a selected row paints one fill and no hover over it. The fill
+/// is not animated: a held arrow key moves the selection many times a second, and a fill that
+/// fades would leave a trail of half-lit rows behind it.
 fn row_fill(e: El, p: &Palette, selected: bool) -> El {
-    if selected { e.fill(p.selection) } else { e.fill(Color::TRANSPARENT).hover(p.row_hover) }.motion(motion::HOVER)
+    if selected { e.fill(p.selection) } else { e.fill(Color::TRANSPARENT).hover(p.row_hover) }
 }
 
 fn result_row(s: &App, p: &Palette, scale: f32, item: &Item, index: usize, selected: bool, compact: bool) -> El {
@@ -157,7 +159,7 @@ fn lead_card(p: &Palette, item: &Item, card: &Card, index: usize, selected: bool
                 .child(text(badge.to_string()).font(type_::KEY_CAP).color(p.text_secondary)))
     };
     row().key(format!("row-{}", item.id)).w_full().h(106.0).px(space::XXL).center_y().radius(radius::CARD)
-        .fill(if selected { p.selection } else { p.card_fill }).motion(motion::HOVER)
+        .fill(if selected { p.selection } else { p.card_fill })
         .on_press_tx(move |s: &mut App, tx| s.select(index, tx))
         .on_double_press_tx(|s: &mut App, tx| s.run_primary(tx))
         .child(column(&card.left, &card.left_badge))
@@ -489,7 +491,6 @@ fn menu_row(p: &Palette, action: &Action, index: usize, selected: bool, checked:
     };
     let mut r = row().key(format!("menu-row-{index}")).w_full().h(size::MENU_ROW_H).px(space::MD).gap(space::MD).center_y().radius(radius::MENU_ROW);
     r = if selected { r.fill(p.menu_hover) } else { r.fill(Color::TRANSPARENT).hover(p.menu_hover.alpha(0.06)) }
-        .motion(motion::HOVER)
         .on_press_tx(move |s: &mut App, tx| s.run_menu(index, tx))
         .child(glyph)
         .child(text(action.title.clone()).font(type_::MENU_ROW).color(ink).truncate())

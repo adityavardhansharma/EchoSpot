@@ -112,6 +112,8 @@ pub struct App {
     pub backdrop: rune::Pixels,
     pub has_backdrop: bool,
     pub was_focused: bool,
+    /// When the selection last moved by key, to tell a held key from a press.
+    last_step: f64,
     /// The extension call a confirm dialog answers: session and call id.
     pub dialog_reply: Option<(u64, u64)>,
 }
@@ -146,6 +148,7 @@ impl App {
             backdrop: rune::Pixels::new(),
             has_backdrop: false,
             was_focused: false,
+            last_step: f64::NEG_INFINITY,
             dialog_reply: None,
         };
         app.refresh();
@@ -309,6 +312,13 @@ impl App {
             return;
         }
         let next = (screen.sel as i32 + delta).clamp(0, n - 1);
+        // A held key repeats faster than a scroll can ease: follow it without animating, so the
+        // list keeps up instead of smearing behind the selection.
+        let held = self.clock - self.last_step < 0.12;
+        self.last_step = self.clock;
+        if held {
+            tx.instant();
+        }
         self.select(next as usize, tx);
     }
 
