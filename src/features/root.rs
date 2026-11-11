@@ -210,6 +210,18 @@ pub fn build(app: &App, query: &str) -> Built {
         sections.push("Calculator", vec![item]);
     }
 
+    // An alias and a space hand the rest of the line to that quicklink: `g rust traits`.
+    if let Some((alias, rest)) = q.split_once(' ').map(|(a, r)| (a, r.trim())).filter(|(_, r)| !r.is_empty()) {
+        let hits: Vec<Item> = app.quicklinks.list.iter()
+            .filter(|l| !l.alias.is_empty() && l.alias.eq_ignore_ascii_case(alias) && quicklinks::takes_query(&l.link))
+            .map(|l| Item::new(format!("alias:{}", l.id), format!("Search {} for “{}”", l.name, util::truncate(rest, 40)), quicklinks::icon(&l.link))
+                .trailing("Quicklink")
+                .action(Action::new("Open in Browser", &icons::ARROW_UP_RIGHT, Act::Quicklink(QuicklinkOp::Open(l.id.clone(), rest.into()))))
+                .action(Action::new("Copy Link", &icons::COPY, Act::Copy(quicklinks::resolve(&l.link, rest))).keys("ctrl+shift+c")))
+            .collect();
+        sections.push("Quicklink", hits);
+    }
+
     let mut scored: Vec<(i32, f32, Item)> = all.into_iter().filter_map(|e| {
         let score = fuzzy::score_item(q, &e.item.title, &e.keywords)?;
         let boost = app.usage.frecency(&e.item.id);
