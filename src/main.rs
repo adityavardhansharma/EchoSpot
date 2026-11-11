@@ -12,6 +12,7 @@ mod icons;
 mod ipc;
 mod model;
 mod settings;
+mod settings_ui;
 mod store;
 mod theme;
 mod ui;
@@ -76,7 +77,7 @@ fn main() {
     let command = args.first().map(String::as_str).unwrap_or("");
     match command {
         "clip-store" => return features::clipboard::store_from_stdin(args.iter().any(|a| a == "--image")),
-        "toggle" | "show" | "hide" | "quit" | "open" => {
+        "toggle" | "show" | "hide" | "quit" | "open" | "settings" => {
             // A resident palette answers; without one, this process becomes it.
             if ipc::send(&args.join(" ")) || matches!(command, "hide" | "quit") {
                 return;
@@ -91,7 +92,7 @@ fn main() {
         }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
-            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks>\n  echospot quit");
+            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot quit");
         }
         _ => {}
     }
@@ -132,6 +133,14 @@ fn main() {
         }
         state
     });
+    let settings_spec = AppSpec::<settings_ui::SettingsUi> {
+        on_key: Some(settings_ui::on_key),
+        min_size: Some((640.0, 420.0)),
+        ..AppSpec::new(settings_ui::TITLE, settings_ui::SIZE, settings_ui::SettingsUi::new, settings_ui::view)
+    };
+    let hidden = WindowOptions { visible: false, ..Default::default() };
+    let (settings_handle, settings_window) = app.window(rune::WindowSpec::new("settings", settings_spec).options(hidden));
+    settings_ui::attach(settings_handle, settings_window, handle.clone());
     if !headless {
         let hud = app.overlay(OverlaySpec {
             name: "echospot-hud", size: hud::SIZE, edge: ScreenEdge::Bottom, margin: hud::EDGE_OFFSET,

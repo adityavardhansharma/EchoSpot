@@ -368,7 +368,7 @@ impl App {
         let mut query = TextEdit::new("");
         query.focused = true;
         let entries = vec![
-            Action::new("Settings…", &icons::GEAR, Act::OpenPath(crate::settings::Settings::path())).keys("ctrl+,"),
+            Action::new("Settings…", &icons::GEAR, Act::OpenSettings(String::new())).keys("ctrl+,"),
             Action::new("Extension Store", &icons::STORE, Act::Push(Route::Store)),
             Action::new("Manage Extensions", &icons::PUZZLE, Act::Push(Route::Extensions)),
             Action::new("Reload Applications", &icons::REFRESH, Act::Toast("reload".into())),
@@ -579,7 +579,10 @@ impl App {
             }
             Act::Ext(act) => crate::ext::perform(self, act, tx),
             Act::Ai(op) => features::ai::perform(self, op, tx),
-            Act::OpenSettings(_pane) => self.perform(Act::OpenPath(crate::settings::Settings::path()), tx),
+            Act::OpenSettings(pane) => {
+                self.hide(tx);
+                crate::settings_ui::open(&pane);
+            }
             Act::Toast(text) => {
                 if text == "reload" {
                     self.apps = features::apps::scan();
@@ -713,7 +716,7 @@ impl App {
             }
             Key::Backspace if empty_query && plain && self.screens.len() > 1 => self.pop(tx),
             Key::Command('k') if !m.shift => self.open_actions(),
-            Key::Command(',') => self.perform(Act::OpenPath(crate::settings::Settings::path()), tx),
+            Key::Command(',') => self.perform(Act::OpenSettings(String::new()), tx),
             Key::Command('q') => tx.quit(),
             Key::Command('w') => self.hide(tx),
             Key::Tab if plain && !self.top().filters.is_empty() => self.open_filter_menu(),

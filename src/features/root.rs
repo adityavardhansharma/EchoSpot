@@ -82,6 +82,11 @@ fn entries(app: &App) -> Vec<Entry> {
         keywords: "new quicklink add bookmark url".into(),
     });
     out.push(Entry {
+        item: Item::new("cmd:settings", "EchoSpot Settings", IconSrc::Glyph(&icons::GEAR)).trailing("Command")
+            .action(Action::new("Open Settings", &icons::GEAR, Act::OpenSettings(String::new()))),
+        keywords: "preferences settings configure options".into(),
+    });
+    out.push(Entry {
         item: Item::new("cmd:ai", "AI Chat", IconSrc::Glyph(&icons::SPARKLES)).trailing("Command")
             .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Ai(AiOp::Open(String::new()))))
             .action(favorite_action(app, "cmd:ai")),

@@ -285,7 +285,12 @@ fn eval(src: &str) -> Option<f64> {
 
 /// A number as people write one: grouped thousands, up to ten significant decimals.
 pub fn format_number(v: f64) -> String {
-    if v == 0.0 {
+    // Twelve significant digits: enough to be exact, few enough to hide float noise.
+    let v = if v == 0.0 { 0.0 } else {
+        let scale = 10f64.powi(11 - v.abs().log10().floor() as i32);
+        (v * scale).round() / scale
+    };
+    if v == 0.0 || v.abs() < 1e-11 {
         return "0".into();
     }
     let abs = v.abs();

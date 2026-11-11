@@ -29,6 +29,8 @@ pub fn route(name: &str) -> Option<Route> {
         "quicklinks" => Route::Quicklinks,
         "store" => Route::Store,
         "themes" => Route::Themes,
+        "ai" => Route::Ai,
+        "extensions" => Route::Extensions,
         _ => return None,
     })
 }
@@ -72,6 +74,7 @@ pub fn serve(handle: AppHandle<App>) {
                 Some("show") => show(&handle, None),
                 Some("open") => show(&handle, words.next().and_then(route)),
                 Some("hide") => hide(&handle),
+                Some("settings") => crate::settings_ui::open(words.next().unwrap_or("")),
                 Some("quit") => handle.quit(),
                 _ => {}
             }
