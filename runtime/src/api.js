@@ -407,12 +407,12 @@ export function createApi(ctx) {
     supportPath,
     raycastVersion: "1.104.0",
     ownerOrAuthorName: manifest.owner || manifest.author || "",
-    launchType: "userInitiated",
+    launchType: launch.launchType || "userInitiated",
     isDevelopment: false,
     appearance: launch.appearance || "dark",
     theme: launch.appearance || "dark",
     textSize: "medium",
-    canAccess: () => false,
+    canAccess: (feature) => !!launch.ai && feature === AI,
   };
 
   // ---- Components --------------------------------------------------------------------------
@@ -501,11 +501,93 @@ export function createApi(ctx) {
   Form.LinkAccessory = host("Form.LinkAccessory");
   Form.DatePicker.Type = enums.DatePickerType;
 
-  const MenuBarExtra = () => null;
-  MenuBarExtra.Item = () => null;
-  MenuBarExtra.Section = () => null;
-  MenuBarExtra.Submenu = () => null;
-  MenuBarExtra.Separator = () => null;
+  // There is no menu bar to sit in: the menu renders as a tree, and EchoSpot lists it.
+  const MenuBarExtra = host("MenuBarExtra");
+  MenuBarExtra.Item = host("MenuBarExtra.Item");
+  MenuBarExtra.Section = host("MenuBarExtra.Section");
+  MenuBarExtra.Submenu = host("MenuBarExtra.Submenu");
+  MenuBarExtra.Separator = host("MenuBarExtra.Separator");
+
+  // ---- AI ----------------------------------------------------------------------------------
+  // The question goes to EchoSpot, which asks the provider set up in its Settings. The key
+  // stays there; the extension only ever sees the answer.
+  const anyName = () => new Proxy({}, { get: (_, name) => (typeof name === "string" ? name : undefined) });
+  const AI = {
+    ask: (prompt, options) => {
+      const listeners = [];
+      const answer = track(call("aiAsk", [String(prompt), { creativity: options?.creativity, model: options?.model }])).then((text) => {
+        for (const listener of listeners) listener(text);
+        return text;
+      });
+      // Raycast's answer is also a stream; here it arrives in one piece.
+      answer.on = (event, listener) => {
+        if (event === "data") listeners.push(listener);
+        return answer;
+      };
+      return answer;
+    },
+    Model: anyName(),
+    Creativity: anyName(),
+  };
+
+  // ---- Windows, through Hyprland -----------------------------------------------------------
+  const hypr = (args) => {
+    try {
+      return JSON.parse(execFileSync("hyprctl", args, { encoding: "utf8" }));
+    } catch {
+      return null;
+    }
+  };
+  const dispatch = (lua, legacy) => {
+    try {
+      execFileSync("hyprctl", ["dispatch", lua], { stdio: "ignore" });
+    } catch {
+      try {
+        execFileSync("hyprctl", ["dispatch", ...legacy], { stdio: "ignore" });
+      } catch {
+        // No Hyprland to ask.
+      }
+    }
+  };
+  const asWindow = (c, active) => ({
+    id: c.address, active, desktopId: String(c.workspace?.id ?? ""),
+    bounds: { position: { x: c.at?.[0] ?? 0, y: c.at?.[1] ?? 0 }, size: { width: c.size?.[0] ?? 0, height: c.size?.[1] ?? 0 } },
+    fullScreenSettable: true, positionable: true, resizable: true,
+    application: { name: c.class, bundleId: c.class, path: "" },
+  });
+  const realWindows = () => (hypr(["clients", "-j"]) || []).filter((c) => c.mapped && c.class !== "echospot");
+  // The palette itself has the keyboard while a command runs; "active" is the window behind it.
+  const activeAddress = () => launch.frontmost?.address || realWindows().sort((a, b) => a.focusHistoryID - b.focusHistoryID)[0]?.address;
+  const WindowManagement = {
+    DesktopType: enums.nestedEnums.WindowManagement.DesktopType,
+    getActiveWindow: async () => {
+      const address = activeAddress();
+      const found = realWindows().find((c) => c.address === address);
+      if (!found) throw new Error("No window is active.");
+      return asWindow(found, true);
+    },
+    getWindowsOnActiveDesktop: async () => {
+      const workspace = hypr(["activeworkspace", "-j"])?.id;
+      const address = activeAddress();
+      return realWindows().filter((c) => c.workspace?.id === workspace).map((c) => asWindow(c, c.address === address));
+    },
+    getDesktops: async () => (hypr(["monitors", "-j"]) || []).map((m) => ({
+      id: String(m.activeWorkspace?.id ?? ""), active: !!m.focused, screenId: m.name,
+      size: { width: Math.round(m.width / (m.scale || 1)), height: Math.round(m.height / (m.scale || 1)) }, type: "user",
+    })),
+    setWindowBounds: async ({ id, bounds, desktopId }) => {
+      const w = `window = "address:${id}"`;
+      if (desktopId != null) dispatch(`hl.dsp.window.move({ ${w}, workspace = "${desktopId}", follow = false })`, ["movetoworkspacesilent", `${desktopId},address:${id}`]);
+      if (bounds === "fullscreen") {
+        dispatch(`hl.dsp.window.fullscreen({ ${w}, mode = "fullscreen", action = "set" })`, ["fullscreen", "0"]);
+        return;
+      }
+      if (!bounds) return;
+      dispatch(`hl.dsp.window.float({ ${w}, action = "enable" })`, ["setfloating", `address:${id}`]);
+      if (bounds.size) dispatch(`hl.dsp.window.resize({ ${w}, x = ${Math.round(bounds.size.width)}, y = ${Math.round(bounds.size.height)} })`, ["resizewindowpixel", `exact ${Math.round(bounds.size.width)} ${Math.round(bounds.size.height)},address:${id}`]);
+      if (bounds.position) dispatch(`hl.dsp.window.move({ ${w}, x = ${Math.round(bounds.position.x)}, y = ${Math.round(bounds.position.y)} })`, ["movewindowpixel", `exact ${Math.round(bounds.position.x)} ${Math.round(bounds.position.y)},address:${id}`]);
+    },
+  };
 
   const key = (k, mods) => ({ modifiers: mods, key: k });
   const Keyboard = {
@@ -536,17 +618,14 @@ export function createApi(ctx) {
     popToRoot: async (options) => notify("popToRoot", [options || {}]),
     clearSearchBar: async () => notify("clearSearchBar", []),
     launchCommand: async (options) => notify("launchCommand", [options]),
-    updateCommandMetadata: async () => {},
+    updateCommandMetadata: async (metadata) => notify("commandMetadata", [{ subtitle: metadata?.subtitle ?? "" }]),
     getApplications, getDefaultApplication, getFrontmostApplication, getSelectedText,
     getSelectedFinderItems: unsupported("getSelectedFinderItems"),
     captureException: (error) => console.error(error),
     randomId: () => crypto.randomUUID(),
-    AI: { ask: unsupported("AI"), Model: {}, Creativity: {} },
+    AI,
     BrowserExtension: { getContent: unsupported("BrowserExtension"), getTabs: unsupported("BrowserExtension") },
-    WindowManagement: {
-      getActiveWindow: unsupported("WindowManagement"), getWindowsOnActiveDesktop: unsupported("WindowManagement"),
-      getDesktops: unsupported("WindowManagement"), setWindowBounds: unsupported("WindowManagement"), DesktopType: enums.nestedEnums.WindowManagement.DesktopType,
-    },
+    WindowManagement,
     OAuth: { ...enums.nestedEnums.OAuth, PKCEClient },
     __settle: async () => {
       while (inFlight.size) await Promise.allSettled([...inFlight]);
