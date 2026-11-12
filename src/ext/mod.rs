@@ -90,6 +90,8 @@ pub struct Session {
     /// The last text sent to `onSearchTextChange`, so a refresh doesn't resend it.
     sent_search: String,
     hud: Option<String>,
+    /// Whether the search bar's dropdown has announced its starting value.
+    dropdown_ready: bool,
 }
 
 impl Session {
@@ -286,7 +288,7 @@ impl Extensions {
         self.sessions.push(Session {
             id, extension: ext.id.clone(), command: command.name.clone(), title: command.title.clone(),
             view: command.mode == "view", child, stdin, tree: Value::Null, depth: 1, ready: false,
-            sent_search: String::new(), hud: None,
+            sent_search: String::new(), hud: None, dropdown_ready: false,
         });
         Ok(id)
     }
@@ -709,6 +711,7 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                 session.tree = message.get("tree").cloned().unwrap_or(Value::Null);
                 session.depth = message.get("depth").and_then(Value::as_u64).unwrap_or(1);
                 session.ready = true;
+                init_dropdown(app, id);
                 if top_is {
                     view::sync_form(app, id, tx);
                     if app.top().route != Route::Form {
@@ -853,11 +856,62 @@ pub fn search_changed(app: &mut App, id: u64, text: &str) {
     }
 }
 
+fn dropdown_store() -> PathBuf {
+    util::config_dir().join("extensions").join("dropdowns.json")
+}
+
+/// A search bar dropdown starts on a value (the one it was left on when it stores its value,
+/// else its default, else its first item) and tells the command so, as Raycast does on mount.
+/// Commands that load their list from `onChange` show nothing until it is called.
+fn init_dropdown(app: &mut App, id: u64) {
+    let Some(session) = app.ext.session(id) else { return };
+    if session.dropdown_ready {
+        return;
+    }
+    let Some(dropdown) = session.root().and_then(|r| r.get("props")).and_then(|p| p.get("searchBarAccessory")).cloned() else { return };
+    let dp = dropdown.get("props").cloned().unwrap_or(Value::Null);
+    let options = view::dropdown_options(&dropdown);
+    if options.is_empty() {
+        return;
+    }
+    let key = format!("{}:{}", session.extension, session.command);
+    let stored = dp.get("storeValue").and_then(Value::as_bool).unwrap_or(false)
+        .then(|| util::read_json::<HashMap<String, String>>(&dropdown_store()).remove(&key)).flatten();
+    let wanted = text_of(dp.get("value")).into_some().or(stored).or(text_of(dp.get("defaultValue")).into_some());
+    let index = wanted.and_then(|w| options.iter().position(|(value, _)| *value == w)).unwrap_or(0);
+    let on_change = handler(dp.get("onChange"));
+    if let Some(session) = app.ext.session_mut(id) {
+        session.dropdown_ready = true;
+        if let Some(handler) = on_change {
+            session.send(json!({ "t": "event", "handler": handler, "args": [options[index].0] }));
+        }
+    }
+    if let Some(screen) = app.screens.iter_mut().find(|s| s.route == Route::Ext(id)) {
+        screen.filter = index;
+    }
+}
+
+trait IntoSome: Sized {
+    fn into_some(self) -> Option<Self>;
+}
+impl IntoSome for String {
+    /// `None` for the empty string.
+    fn into_some(self) -> Option<String> {
+        (!self.is_empty()).then_some(self)
+    }
+}
+
 /// The header's dropdown changed: tell the command which value is chosen.
 pub fn filter_changed(app: &mut App, id: u64, index: usize) {
     let Some(session) = app.ext.session_mut(id) else { return };
     let Some(dropdown) = session.root().and_then(|r| r.get("props")).and_then(|p| p.get("searchBarAccessory")).cloned() else { return };
     let values = view::dropdown_options(&dropdown);
-    let (Some((value, _)), Some(handler)) = (values.get(index), handler(dropdown.get("props").and_then(|p| p.get("onChange")))) else { return };
+    let dp = dropdown.get("props").cloned().unwrap_or(Value::Null);
+    let (Some((value, _)), Some(handler)) = (values.get(index), handler(dp.get("onChange"))) else { return };
     session.send(json!({ "t": "event", "handler": handler, "args": [value] }));
+    if dp.get("storeValue").and_then(Value::as_bool).unwrap_or(false) {
+        let mut stored: HashMap<String, String> = util::read_json(&dropdown_store());
+        stored.insert(format!("{}:{}", session.extension, session.command), value.clone());
+        util::write_json(&dropdown_store(), &stored);
+    }
 }
