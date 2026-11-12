@@ -174,9 +174,27 @@ async function run() {
   const loaded = require(file);
   const entry = loaded && loaded.default ? loaded.default : loaded;
   if (typeof entry !== "function") throw new Error(`${command.name}.js exports no command.`);
-  const props = { arguments: launch.arguments || {}, fallbackText: launch.fallbackText, launchContext: launch.context, launchType: "userInitiated" };
-  if (command.mode === "view") {
+  const props = { arguments: launch.arguments || {}, fallbackText: launch.fallbackText, launchContext: launch.context, launchType: launch.launchType || "userInitiated" };
+  if (command.mode === "view" || command.mode === "menu-bar") {
     pushView(React.createElement(NavigationRoot, null, React.createElement(entry, props)));
+    if (launch.launchType === "background") {
+      // A scheduled run has no one looking: once the menu has loaded (or after a while), it ends.
+      const started = Date.now();
+      const done = () => {
+        const tree = top()?.tree;
+        const root = tree?.children?.[0];
+        const loaded = root && !root.props?.isLoading;
+        if (loaded || Date.now() - started > 20000) {
+          api.__settle().then(() => {
+            send({ t: "exit" });
+            setTimeout(() => process.exit(0), 50);
+          });
+        } else {
+          setTimeout(done, 250);
+        }
+      };
+      setTimeout(done, 400);
+    }
   } else {
     // A no-view command runs to completion and the host goes with it.
     await entry(props);
