@@ -4,7 +4,7 @@
 mod currency;
 mod dates;
 mod units;
-mod zones;
+pub mod zones;
 
 use crate::model::Card;
 use units::{Unit, ANGLE, AREA, CURRENCY, DATA, DATA_RATE, ENERGY, LENGTH, POWER, SPEED, TEMP, TIME, VOLUME};
