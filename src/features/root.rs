@@ -26,6 +26,8 @@ fn builtins() -> Vec<Builtin> {
         Builtin { id: "cmd:windows", title: "Switch Windows", keywords: "window switcher open apps", icon: &icons::WINDOWS, tint: Tint::Indigo, route: Route::Windows },
         Builtin { id: "cmd:snippets", title: "Search Snippets", keywords: "snippet text expand", icon: &icons::TEXT, tint: Tint::Red, route: Route::Snippets },
         Builtin { id: "cmd:quicklinks", title: "Search Quicklinks", keywords: "quicklink bookmark url link", icon: &icons::LINK, tint: Tint::Teal, route: Route::Quicklinks },
+        Builtin { id: "cmd:notes", title: "Search Notes", keywords: "note markdown write memo", icon: &icons::FILE_TEXT, tint: Tint::Yellow, route: Route::Notes },
+        Builtin { id: "cmd:schedule", title: "My Schedule", keywords: "calendar events meetings agenda today", icon: &icons::CLOCK, tint: Tint::Red, route: Route::Schedule },
         Builtin { id: "cmd:themes", title: "Change Theme", keywords: "omarchy theme appearance colors", icon: &icons::PALETTE, tint: Tint::Pink, route: Route::Themes },
         Builtin { id: "cmd:store", title: "Store", keywords: "raycast extensions install browse", icon: &icons::STORE, tint: Tint::Cyan, route: Route::Store },
         Builtin { id: "cmd:extensions", title: "Manage Extensions", keywords: "raycast extensions installed uninstall", icon: &icons::PUZZLE, tint: Tint::Green, route: Route::Extensions },
@@ -84,6 +86,18 @@ fn entries(app: &App) -> Vec<Entry> {
         keywords: "new quicklink add bookmark url".into(),
     });
     out.push(Entry {
+        item: Item::new("cmd:new-note", "Create Note", IconSrc::Badge(&icons::PLUS, Tint::Yellow)).trailing("Command")
+            .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Note(NoteOp::New(String::new())))),
+        keywords: "new note write markdown memo".into(),
+    });
+    for (id, title, op) in [("cmd:backup-export", "Export Backup", BackupOp::Export), ("cmd:backup-import", "Import Backup", BackupOp::Import)] {
+        out.push(Entry {
+            item: Item::new(id, title, IconSrc::Badge(if matches!(op, BackupOp::Export) { &icons::UPLOAD } else { &icons::DOWNLOAD }, Tint::Graphite)).trailing("Command")
+                .action(Action::new("Open Command", &icons::ARROW_UP_RIGHT, Act::Backup(op))),
+            keywords: "backup restore export import settings data migrate".into(),
+        });
+    }
+    out.push(Entry {
         item: Item::new("cmd:settings", "EchoSpot Settings", IconSrc::Badge(&icons::GEAR, Tint::Graphite)).trailing("Command")
             .action(Action::new("Open Settings", &icons::GEAR, Act::OpenSettings(String::new()))),
         keywords: "preferences settings configure options".into(),
@@ -94,13 +108,22 @@ fn entries(app: &App) -> Vec<Entry> {
             .action(favorite_action(app, "cmd:ai")),
         keywords: "ai ask claude gpt assistant quick ai chat".into(),
     });
-    for q in crate::features::ai::QUICK_ACTIONS {
+    for q in crate::features::ai::quick_actions(app) {
         let id = format!("ai:{}", q.id);
         out.push(Entry {
-            item: Item::new(id.clone(), q.title, IconSrc::Badge(q.icon, Tint::Violet)).trailing("Quick Action")
-                .action(Action::new("Run on Selected Text", &icons::SPARKLES, Act::Ai(AiOp::Quick(q.id.into()))))
+            item: Item::new(id.clone(), q.title.clone(), IconSrc::Badge(q.icon, Tint::Violet)).trailing("Quick Action")
+                .action(Action::new("Run on Selected Text", &icons::SPARKLES, Act::Ai(AiOp::Quick(q.id.clone()))))
                 .action(favorite_action(app, &id)),
-            keywords: q.keywords.into(),
+            keywords: q.keywords.clone(),
+        });
+    }
+    for p in &app.ai_library.presets {
+        let id = format!("preset:{}", p.id);
+        out.push(Entry {
+            item: Item::new(id.clone(), format!("Chat with {}", p.name), IconSrc::Badge(&icons::PERSON, Tint::Violet)).trailing("Command")
+                .action(Action::new("New Chat with Preset", &icons::CHAT, Act::Ai(AiOp::UsePreset(p.id.clone()))))
+                .action(favorite_action(app, &id)),
+            keywords: "ai chat preset".into(),
         });
     }
     for c in system::COMMANDS.iter().filter(|c| system::available(c.action)) {
@@ -153,7 +176,30 @@ fn entries(app: &App) -> Vec<Entry> {
         out.push(Entry { item, keywords: format!("{} {}", s.keyword, util::truncate(&s.text, 60)) });
     }
     out.extend(crate::ext::commands(app).into_iter().map(|(item, keywords)| Entry { item, keywords }));
+    out.extend(crate::features::scripts::rows(app).into_iter().map(|(item, keywords)| Entry { item, keywords }));
+    // Any row can carry an alias and a global hotkey.
+    for e in &mut out {
+        let id = e.item.id.clone();
+        if let Some(alias) = app.bindings.aliases.get(&id) {
+            e.keywords.push_str(&format!(" {alias}"));
+            e.item.accessories.push(Accessory { icon: None, text: alias.clone(), tag: None });
+        }
+        if let Some(chord) = app.bindings.hotkeys.get(&id) {
+            e.item.accessories.push(Accessory { icon: Some(&icons::KEYBOARD), text: keycaps(chord).join(" "), tag: None });
+        }
+        e.item.actions.push(Action::new("Set Alias or Hotkey…", &icons::KEYBOARD, Act::Binding(id, e.item.title.clone())).keys("ctrl+shift+k").section(""));
+    }
     out
+}
+
+/// What Return does on the launcher row with this id.
+pub fn primary(app: &App, id: &str) -> Option<Act> {
+    entries(app).into_iter().find(|e| e.item.id == id).and_then(|e| e.item.actions.into_iter().next()).map(|a| a.act)
+}
+
+/// Every launcher row as `id<TAB>title`, for `echospot commands`.
+pub fn listing(app: &App) -> String {
+    entries(app).iter().map(|e| format!("{}\t{}", e.item.id, e.item.title)).collect::<Vec<_>>().join("\n")
 }
 
 /// What a query can be handed to when nothing above is what was meant. `shown` holds the ids of
@@ -194,10 +240,12 @@ pub fn build(app: &App, query: &str) -> Built {
         let rest = |kind: &str| all.iter().filter(|e| e.item.trailing == kind && !shown.contains(e.item.id.as_str())).map(|e| e.item.clone()).collect::<Vec<_>>();
         let applications = rest("Application");
         let mut commands = rest("Command");
+        commands.extend(rest("Script"));
         commands.extend(rest("Quick Action"));
         commands.extend(rest("Window"));
         let extensions: Vec<Item> = all.iter()
             .filter(|e| e.item.id.starts_with("ext:") && !shown.contains(e.item.id.as_str())).map(|e| e.item.clone()).collect();
+        sections.push("Up Next", crate::features::calendar::up_next(app));
         sections.push("Favorites", favorites);
         sections.push("Suggestions", suggestions);
         sections.push("Applications", applications);
@@ -231,7 +279,9 @@ pub fn build(app: &App, query: &str) -> Built {
     let mut scored: Vec<(i32, f32, Item)> = all.into_iter().filter_map(|e| {
         let score = fuzzy::score_item(q, &e.item.title, &e.keywords)?;
         let boost = app.usage.frecency(&e.item.id);
-        Some((score + (boost * 12.0) as i32 + if app.usage.is_favorite(&e.item.id) { 20 } else { 0 }, boost, e.item))
+        // An alias typed exactly is that row, whatever else matches.
+        let alias = app.bindings.aliases.get(&e.item.id).is_some_and(|a| a.eq_ignore_ascii_case(q));
+        Some((score + (boost * 12.0) as i32 + if app.usage.is_favorite(&e.item.id) { 20 } else { 0 } + if alias { 100_000 } else { 0 }, boost, e.item))
     }).collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.total_cmp(&a.1)).then(a.2.title.len().cmp(&b.2.title.len())));
     let results: Vec<Item> = scored.into_iter().take(60).map(|(_, _, item)| item).collect();
