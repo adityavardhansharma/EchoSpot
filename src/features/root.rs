@@ -109,7 +109,7 @@ fn entries(app: &App) -> Vec<Entry> {
         let act = match c.confirm {
             Some((message, confirm)) => Act::Confirm(Box::new(Confirm {
                 title: c.title.into(), message: message.into(), icon: c.icon, confirm: confirm.into(),
-                destructive: matches!(c.action, system::SystemAction::EmptyTrash), act: run,
+                destructive: matches!(c.action, system::SystemAction::EmptyTrash | system::SystemAction::Shutdown | system::SystemAction::Restart | system::SystemAction::Logout), act: run,
             })),
             None => run,
         };

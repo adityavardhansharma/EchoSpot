@@ -554,28 +554,29 @@ fn menu_view(s: &App, p: &Palette, menu: &Menu) -> El {
 }
 
 fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
-    let button = |label: &str, index: usize, color: Color| {
+    // The two answers are the palette's pills: the lit one is what Return does.
+    let button = |label: &str, index: usize, primary: bool| {
         let lit = s.dialog_sel == index;
-        row().key(format!("dialog-{index}")).grow(1.0).h(size::DIALOG_BUTTON_H).center().radius(radius::ROW)
-            .fill(if lit { p.selection.alpha(0.16) } else { p.control_surface }).hover(p.row_hover).press(p.control_pressed)
-            .border(1.0, if lit { p.border } else { Color::TRANSPARENT })
+        let tint = if d.destructive { p.destructive } else { p.primary_action };
+        let base = row().key(format!("dialog-{index}")).grow(1.0).w(0.0).h(size::DIALOG_BUTTON_H).center().radius(size::DIALOG_BUTTON_H / 2.0);
+        let base = if primary { base.fill(tint.alpha(if lit { 0.92 } else { 0.22 })).hover(tint.alpha(0.80)).press(tint) }
+            else { base.fill(if lit { p.control_pressed } else { p.control_surface }).hover(p.control_hover).press(p.control_pressed) };
+        base.border(1.0, if lit { Color::WHITE.alpha(0.22) } else { p.border.alpha(0.08) })
             .on_press_tx(move |s: &mut App, tx| s.answer_dialog(index == 1, tx))
-            .child(text(label.to_string()).font(type_::ROW_TRAILING).color(color))
+            .child(text(label.to_string()).font(type_::BAR).color(if primary && lit { Color::WHITE } else if primary { tint } else { p.text.alpha(0.9) }))
     };
-    let tint = if d.destructive { p.destructive } else { p.text_secondary };
     let card = col().key("dialog").w(size::DIALOG_COMPACT_W).radius(radius::PANEL).clip_rounded(radius::PANEL)
         .backdrop_blur(22.0).fill(if p.dark { rune::color::hex("#1e1e20").unwrap_or(Color::BLACK).alpha(0.78) } else { Color::WHITE.alpha(0.82) })
         .border_gradient(1.0, p.glass_rim_top, p.glass_rim_bottom).shadow(14.0, 44.0, Color::BLACK.alpha(0.45))
         .transition(Transition::opacity().combined(Transition::scale(0.95)))
         .child(col().w_full().padding(22.0).gap(space::XL).items_center()
-            .child(el().size(size::DIALOG_SYMBOL_BOX, size::DIALOG_SYMBOL_BOX).radius(radius::DIALOG_SYMBOL).fill(p.control_surface).center()
-                .child(icon(d.icon, size::DIALOG_SYMBOL - 4.0).color(tint)))
+            .child(badge_tile(d.icon, size::DIALOG_SYMBOL_BOX, if d.destructive { theme::Tint::Red } else { theme::Tint::Graphite }))
             .child(col().w_full().gap(space::XS).items_center()
-                .child(text(d.title.clone()).font(type_::PANEL_TITLE).color(p.text).align(rune::Align::Center).wrap())
+                .child(text(d.title.clone()).font(type_::TITLE3).color(p.text).align(rune::Align::Center).wrap())
                 .child(text(d.message.clone()).font(type_::ROW_TRAILING).color(p.text_secondary).align(rune::Align::Center).wrap())))
         .child(row().w_full().px(space::DIALOG_INSET).pb(space::DIALOG_INSET).gap(space::MD)
-            .child(button("Cancel", 0, p.text_secondary))
-            .child(button(&d.confirm, 1, if d.destructive { p.destructive } else { p.primary_action })));
+            .child(button("Cancel", 0, false))
+            .child(button(&d.confirm, 1, true)));
     let dim = el().key("dialog-dim").pin(FULL, FULL, FULL, FULL).fill(p.dialog_dimming).hit()
         .transition(Transition::opacity()).on_press_tx(|s: &mut App, tx| s.answer_dialog(false, tx));
     el().pin(FULL, FULL, FULL, FULL).child(dim).child(row().pin(FULL, FULL, FULL, FULL).center().child(card))
