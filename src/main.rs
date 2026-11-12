@@ -90,10 +90,28 @@ fn main() {
         "clip-store" => return features::clipboard::store_from_stdin(args.iter().any(|a| a == "--image")),
         "toggle" | "show" | "hide" | "quit" | "open" | "settings" => {
             // A resident palette answers; without one, this process becomes it.
-            if ipc::send(&args.join(" ")) || matches!(command, "hide" | "quit") {
+            // A headless run (`--snap`, `--script`) draws its own palette and leaves the resident one alone.
+            let headless = args.iter().any(|a| a.starts_with("--snap") || a.starts_with("--tree") || a.starts_with("--script"));
+            if !headless && (ipc::send(&args.join(" ")) || matches!(command, "hide" | "quit")) {
                 return;
             }
         }
+        "run" => {
+            // A hotkey's command: only a resident palette can run a row.
+            if args.len() < 2 || !ipc::send(&args.join(" ")) {
+                eprintln!("echospot run <command-id>: needs a running EchoSpot. `echospot commands` lists the ids.");
+            }
+            return;
+        }
+        "commands" => return match ipc::ask("commands") {
+            Some(list) => println!("{list}"),
+            None => eprintln!("echospot commands: needs a running EchoSpot."),
+        },
+        "mcp" => return match args.get(1).map(String::as_str) {
+            Some("call") => features::mcp::cli_call(args.get(2).map(String::as_str).unwrap_or(""), args.get(3).map(String::as_str).unwrap_or("{}")),
+            _ => features::mcp::cli(),
+        },
+        "backup" | "restore" => return features::backup::cli(command, &args[1..]),
         "ext" => return ext::store::cli(&args[1..]),
         "url" => {
             // The system opened a link with EchoSpot; only a running palette has anyone waiting on it.
@@ -109,7 +127,7 @@ fn main() {
         }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
-            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot quit");
+            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
         }
         _ => {}
     }
@@ -141,12 +159,18 @@ fn main() {
     app = app.init(move || {
         let mut state = App::new();
         state.me = Some(me);
+        if !headless {
+            state.bindings.apply();
+        }
         if show_now {
             state.will_show();
         } else {
             state.read_status();
         }
         if let Some(route) = open_route.as_deref().and_then(ipc::route) {
+            if route == model::Route::Notes {
+                state.notes = features::notes::load();
+            }
             state.screens.push(app::Screen::new(route));
             state.refresh();
         }
@@ -166,7 +190,14 @@ fn main() {
             align: Align::Center, inset: 0.0, interactive: false, view: hud::view,
         }, hud::Hud::default());
         hud::attach(hud);
+        // Twice a minute, extensions' background commands that have come due are run.
+        let ticker = handle.clone();
+        std::thread::Builder::new().name("echospot-schedule".into()).spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+            ticker.update(|s: &mut App, _| ext::tick(s));
+        }).ok();
         ipc::serve(handle);
+        features::expander::set_enabled(settings::Settings::load().snippet_expansion);
         if settings::Settings::load().clipboard_history {
             features::clipboard::start_watchers();
         }

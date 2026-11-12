@@ -80,6 +80,14 @@ pub struct Toast {
     pub until: f64,
 }
 
+/// A page of Markdown filling the palette: a script's output, a note being read.
+#[derive(Clone)]
+pub struct Page {
+    pub title: String,
+    pub markdown: String,
+    pub actions: Vec<Action>,
+}
+
 pub struct App {
     pub me: Option<AppHandle<App>>,
     pub screens: Vec<Screen>,
@@ -99,8 +107,14 @@ pub struct App {
     pub files: features::files::FileSearch,
     pub snippets: features::snippets::Snippets,
     pub quicklinks: features::quicklinks::Quicklinks,
+    pub bindings: features::bindings::Bindings,
+    pub scripts: Vec<features::scripts::Script>,
+    pub page: Option<Page>,
+    pub notes: Vec<features::notes::Note>,
+    pub schedule: features::calendar::Schedule,
     pub ext: Extensions,
     pub chat: features::ai::Chat,
+    pub ai_library: features::ai_library::Library,
     pub form: Option<features::forms::Form>,
     pub clock: f64,
     pub scale: f32,
@@ -139,8 +153,14 @@ impl App {
             files: features::files::FileSearch::default(),
             snippets: features::snippets::Snippets::load(),
             quicklinks: features::quicklinks::Quicklinks::load(),
+            bindings: features::bindings::Bindings::load(),
+            scripts: features::scripts::load(),
+            page: None,
+            notes: Vec::new(),
+            schedule: Default::default(),
             ext: Extensions::load(),
             chat: features::ai::Chat::default(),
+            ai_library: features::ai_library::Library::load(),
             form: None,
             clock: 0.0,
             scale: 2.0,
@@ -184,8 +204,22 @@ impl App {
             Route::Windows => features::root::windows(self, &query),
             Route::Snippets => features::snippets::build(self, &query),
             Route::Quicklinks => features::quicklinks::build(self, &query),
+            Route::Notes => features::notes::build(self, &query),
+            Route::Schedule => features::calendar::build(self, &query),
             Route::Themes => features::root::themes(self, &query),
             Route::Form => Built::list(Sections::default(), ""),
+            Route::Page => {
+                // One unseen row carries the page's actions to the bottom bar.
+                let page = self.page.clone();
+                let mut built = Built::list(Sections::default(), page.as_ref().map(|p| p.title.as_str()).unwrap_or("")).keep();
+                if let Some(page) = page {
+                    let mut item = Item::new("page", page.title, IconSrc::None);
+                    item.actions = page.actions;
+                    built.items = vec![item];
+                    built.rows = vec![Row::Item(0)];
+                }
+                built
+            }
             Route::Ai => features::ai::build(self, &query),
             Route::Store => crate::ext::store::build(self, &query),
             Route::Extensions => crate::ext::store::installed(self, &query),
@@ -213,11 +247,40 @@ impl App {
         if self.top().route == Route::Clipboard {
             self.clipboard.reload();
         }
+        if self.top().route == Route::Notes {
+            self.notes = features::notes::load();
+        }
+        if self.top().route == Route::Schedule {
+            features::calendar::refresh(self, false);
+        }
         if self.top().route == Route::Ai {
             self.top_mut().filter = features::ai::model_filter(&self.settings.ai).1;
         }
         self.refresh();
         tx.instant();
+    }
+
+    /// Reads everything kept on disk again: after a restore, or when another process changed it.
+    pub fn reload_stores(&mut self) {
+        self.settings = crate::settings::Settings::load();
+        self.snippets = features::snippets::Snippets::load();
+        self.quicklinks = features::quicklinks::Quicklinks::load();
+        self.bindings = features::bindings::Bindings::load();
+        self.bindings.apply();
+        self.ai_library = features::ai_library::Library::load();
+        self.scripts = features::scripts::load();
+        self.notes = features::notes::load();
+        self.usage = Usage::load();
+        self.ext.rescan();
+        features::expander::set_enabled(self.settings.snippet_expansion);
+        self.schedule.read_at = 0;
+        features::calendar::refresh(self, true);
+        self.refresh();
+    }
+
+    pub fn open_page(&mut self, page: Page, tx: &mut Tx) {
+        self.page = Some(page);
+        self.push(Route::Page, tx);
     }
 
     pub fn pop(&mut self, tx: &mut Tx) {
@@ -256,6 +319,7 @@ impl App {
         self.menu = None;
         self.dialog = None;
         self.form = None;
+        self.page = None;
         let root = self.top_mut();
         root.query.clear();
         root.query.focused = true;
@@ -280,11 +344,15 @@ impl App {
             self.has_backdrop = true;
         }
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
+        self.scripts = features::scripts::load();
+        features::calendar::refresh(self, false);
         self.visible = true;
         self.was_focused = false;
         self.hide_on_blur = true;
         self.refresh();
         self.read_status();
+        // A Hyprland config reload drops runtime bindings; a summon puts the hotkeys back.
+        self.bindings.apply();
     }
 
     /// Reads the system's switches off the UI thread; the rows that show them update when it lands.
@@ -446,7 +514,11 @@ impl App {
                 self.top_mut().filter = index;
                 match self.top().route {
                     Route::Ext(id) => crate::ext::filter_changed(self, id, index),
-                    Route::Ai => features::ai::set_model(self, index),
+                    Route::Ai => {
+                        // Picking another provider's model reorders the list: its own come first.
+                        features::ai::set_model(self, index);
+                        self.top_mut().filter = features::ai::model_filter(&self.settings.ai).1;
+                    }
                     _ => {}
                 }
                 self.refresh();
@@ -623,6 +695,11 @@ impl App {
             }
             Act::Ext(act) => crate::ext::perform(self, act, tx),
             Act::Ai(op) => features::ai::perform(self, op, tx),
+            Act::Backup(op) => features::backup::perform(self, op, tx),
+            Act::Calendar(op) => features::calendar::perform(self, op, tx),
+            Act::Note(op) => features::notes::perform(self, op, tx),
+            Act::Script(op) => features::scripts::perform(self, op, tx),
+            Act::Binding(id, title) => features::bindings::edit(self, &id, &title, tx),
             Act::OpenSettings(pane) => {
                 self.hide(tx);
                 crate::settings_ui::open(&pane);
@@ -638,6 +715,27 @@ impl App {
             }
             Act::Quit => tx.quit(),
         }
+    }
+
+    /// Runs a launcher row's primary action by its id, as a hotkey or `echospot run` asks.
+    /// Returns whether the palette has something to show for it.
+    pub fn run_id(&mut self, id: &str, tx: &mut Tx) -> bool {
+        self.reset();
+        self.will_show();
+        let Some(act) = features::root::primary(self, id) else {
+            self.visible = false;
+            crate::hud::show("No Such Command", Tone::Danger);
+            return false;
+        };
+        self.perform(act, tx);
+        let showing = self.visible && (self.screens.len() > 1 || self.dialog.is_some() || self.form.is_some());
+        if !showing {
+            if let Some(toast) = self.toast.take() {
+                crate::hud::show(&toast.text, toast.tone);
+            }
+            self.visible = false;
+        }
+        showing
     }
 
     /// A refresh that stays on the row it was on.

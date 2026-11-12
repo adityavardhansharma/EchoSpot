@@ -19,6 +19,17 @@ pub fn send(command: &str) -> bool {
     stream.write_all(command.as_bytes()).is_ok()
 }
 
+/// Sends a command and reads what the resident palette answers.
+pub fn ask(command: &str) -> Option<String> {
+    let mut stream = UnixStream::connect(socket()).ok()?;
+    stream.write_all(command.as_bytes()).ok()?;
+    stream.shutdown(std::net::Shutdown::Write).ok()?;
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(6)));
+    let mut text = String::new();
+    stream.read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
 pub fn route(name: &str) -> Option<Route> {
     Some(match name {
         "clipboard" => Route::Clipboard,
@@ -27,6 +38,8 @@ pub fn route(name: &str) -> Option<Route> {
         "windows" => Route::Windows,
         "snippets" => Route::Snippets,
         "quicklinks" => Route::Quicklinks,
+        "notes" => Route::Notes,
+        "schedule" => Route::Schedule,
         "store" => Route::Store,
         "themes" => Route::Themes,
         "ai" => Route::Ai,
@@ -43,6 +56,9 @@ fn show(handle: &AppHandle<App>, route: Option<Route>) {
             s.screens.push(Screen::new(route));
             if s.top().route == Route::Clipboard {
                 s.clipboard.reload();
+            }
+            if s.top().route == Route::Notes {
+                s.notes = crate::features::notes::load();
             }
             s.refresh();
         }
@@ -66,6 +82,27 @@ pub fn serve(handle: AppHandle<App>) {
             if stream.read_to_string(&mut text).is_err() {
                 continue;
             }
+            // `run <id>`: a hotkey. The id is the rest of the line; some hold spaces.
+            if let Some(id) = text.strip_prefix("run ").map(|id| id.trim().to_string()) {
+                let (tx, rx) = std::sync::mpsc::channel();
+                handle.update(move |s, t| {
+                    let _ = tx.send(s.run_id(&id, t));
+                });
+                if rx.recv_timeout(std::time::Duration::from_secs(5)) == Ok(true) {
+                    handle.open();
+                }
+                continue;
+            }
+            if text.trim() == "commands" {
+                let (tx, rx) = std::sync::mpsc::channel();
+                handle.update(move |s, _| {
+                    let _ = tx.send(crate::features::root::listing(s));
+                });
+                if let Ok(list) = rx.recv_timeout(std::time::Duration::from_secs(5)) {
+                    let _ = stream.write_all(list.as_bytes());
+                }
+                continue;
+            }
             let mut words = text.split_whitespace();
             match words.next() {
                 Some("toggle") => {
@@ -86,6 +123,7 @@ pub fn serve(handle: AppHandle<App>) {
                     }
                 }
                 Some("settings") => crate::settings_ui::open(words.next().unwrap_or("")),
+                Some("reload") => handle.update(|s, _| s.reload_stores()),
                 Some("quit") => handle.quit(),
                 _ => {}
             }
