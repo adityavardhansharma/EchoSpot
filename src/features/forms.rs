@@ -78,6 +78,16 @@ impl Field {
 pub enum Target {
     Snippet(Option<String>),
     Quicklink(Option<String>),
+    Binding(String),
+    /// A script's arguments, asked before it runs.
+    Script(String),
+    ScriptNew,
+    Note(Option<String>),
+    Calendar,
+    BackupExport,
+    BackupImport,
+    AiAction(Option<String>),
+    AiPreset(Option<String>),
     ExtPreferences { extension: String, then: Option<String> },
     ExtForm { session: u64 },
 }
@@ -154,6 +164,15 @@ pub fn submit(app: &mut App, tx: &mut Tx) {
     match target {
         Target::Snippet(id) => crate::features::snippets::save(app, id, tx),
         Target::Quicklink(id) => crate::features::quicklinks::save(app, id, tx),
+        Target::Binding(id) => crate::features::bindings::save(app, id, tx),
+        Target::Script(id) => crate::features::scripts::submit(app, id, tx),
+        Target::Note(id) => crate::features::notes::save(app, id, tx),
+        Target::Calendar => crate::features::calendar::save(app, tx),
+        Target::AiAction(id) => crate::features::ai_library::save_action(app, id, tx),
+        Target::AiPreset(id) => crate::features::ai_library::save_preset(app, id, tx),
+        Target::BackupExport => crate::features::backup::submit_export(app, tx),
+        Target::BackupImport => crate::features::backup::submit_import(app, tx),
+        Target::ScriptNew => crate::features::scripts::create(app, tx),
         Target::ExtPreferences { extension, then } => crate::ext::save_preferences(app, &extension, then, tx),
         Target::ExtForm { session } => crate::ext::submit_form(app, session, tx),
     }
