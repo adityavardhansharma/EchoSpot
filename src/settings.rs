@@ -26,11 +26,15 @@ pub struct Settings {
     /// follows the system's time zone and locale.
     pub currency: String,
     pub ai: crate::features::ai::AiSettings,
+    /// Replace a snippet's keyword with its text as it is typed in any app.
+    pub snippet_expansion: bool,
+    /// Calendars to read for My Schedule: iCal addresses or `.ics` files.
+    pub calendars: Vec<String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default() }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false }
     }
 }
 
@@ -43,7 +47,9 @@ impl Settings {
         if !path.exists() {
             util::write_json(&path, &Settings::default());
         }
-        util::read_json(&path)
+        let mut settings: Settings = util::read_json(&path);
+        settings.ai.normalize();
+        settings
     }
     pub fn save(&self) {
         let path = Self::path();
