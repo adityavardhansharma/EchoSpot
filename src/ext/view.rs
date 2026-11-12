@@ -160,6 +160,56 @@ pub fn build(app: &App, session: u64, query: &str) -> Built {
             built.empty = if loading && built.items.is_empty() { ("Loading…".into(), String::new()) } else { empty };
             built
         }
+        "MenuBarExtra" => {
+            let q = query.trim();
+            let mut sections = Sections::default();
+            let mut loose: Vec<Item> = Vec::new();
+            let entry = |node: &Value| -> Option<Item> {
+                let p = props(node);
+                let id = format!("x{session}:m{}", node.get("id").and_then(Value::as_u64).unwrap_or(0));
+                let mut item = Item::new(id, text_of(p.get("title")), p.get("icon").map(|v| icon_from(v, &dir)).unwrap_or(IconSrc::None));
+                let subtitle = text_of(p.get("subtitle"));
+                if !subtitle.is_empty() {
+                    item.subtitle = Some(subtitle);
+                }
+                // An entry with nothing to do is a line of information.
+                if let Some(handler) = handler(p.get("onAction")) {
+                    item = item.action(Action::new("Run", &crate::icons::BOLT, Act::Ext(crate::ext::ExtAct::Event { session, handler, args: vec![] })));
+                }
+                (q.is_empty() || fuzzy::score_item(q, &item.title, item.subtitle.as_deref().unwrap_or("")).is_some()).then_some(item)
+            };
+            for child in children(root) {
+                match kind(child) {
+                    "MenuBarExtra.Item" => loose.extend(entry(child)),
+                    "MenuBarExtra.Section" | "MenuBarExtra.Submenu" => {
+                        if !loose.is_empty() {
+                            sections.0.push((String::new(), std::mem::take(&mut loose)));
+                        }
+                        // A submenu's own submenus are flattened into it.
+                        fn gather<'a>(node: &'a Value, out: &mut Vec<&'a Value>) {
+                            for c in children(node) {
+                                match kind(c) {
+                                    "MenuBarExtra.Item" => out.push(c),
+                                    "MenuBarExtra.Section" | "MenuBarExtra.Submenu" => gather(c, out),
+                                    _ => {}
+                                }
+                            }
+                        }
+                        let mut nodes = Vec::new();
+                        gather(child, &mut nodes);
+                        sections.push(&text_of(props(child).get("title")), nodes.into_iter().filter_map(entry).collect());
+                    }
+                    _ => {}
+                }
+            }
+            if !loose.is_empty() {
+                sections.0.push((String::new(), loose));
+            }
+            let title = text_of(rp.get("title"));
+            let mut built = Built::list(sections, if title.is_empty() { "Search the menu..." } else { &title }).loading(loading).keep();
+            built.empty = if loading { ("Loading…".into(), String::new()) } else { ("Nothing in This Menu".into(), text_of(rp.get("tooltip"))) };
+            built
+        }
         "Detail" => {
             // One unseen row carries the view's actions to the bottom bar.
             let mut item = Item::new(format!("x{session}:detail"), s.title.clone(), IconSrc::None);
