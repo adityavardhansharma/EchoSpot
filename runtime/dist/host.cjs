@@ -10076,6 +10076,103 @@ function createApi(ctx) {
     else await options.dismissAction?.onAction?.();
     return Boolean(confirmed);
   };
+  const base64url = (buffer) => Buffer.from(buffer).toString("base64url");
+  const redirectFor = (method) => {
+    if (method === "app") return "raycast://oauth?package_name=Extension";
+    if (method === "appURI") return "com.raycast:/oauth?package_name=Extension";
+    return "https://raycast.com/redirect?packageName=Extension";
+  };
+  class TokenSet {
+    constructor(data) {
+      this.accessToken = data.accessToken;
+      this.refreshToken = data.refreshToken;
+      this.idToken = data.idToken;
+      this.expiresIn = data.expiresIn;
+      this.scope = data.scope;
+      this.updatedAt = new Date(data.updatedAt || Date.now());
+    }
+    isExpired() {
+      if (this.expiresIn == null) return false;
+      return this.updatedAt.getTime() + (Number(this.expiresIn) - 10) * 1e3 < Date.now();
+    }
+  }
+  class PKCEClient {
+    constructor(options = {}) {
+      this.redirectMethod = options.redirectMethod;
+      this.providerName = options.providerName || extensionName;
+      this.providerIcon = options.providerIcon;
+      this.providerId = options.providerId;
+      this.description = options.description;
+      const id = String(this.providerId || this.providerName).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      this.tokensPath = import_node_path.default.join(supportPath, `oauth-${id}.json`);
+    }
+    async authorizationRequest(options) {
+      const codeVerifier = base64url(import_node_crypto.default.randomBytes(48));
+      const codeChallenge = base64url(import_node_crypto.default.createHash("sha256").update(codeVerifier).digest());
+      const state = base64url(JSON.stringify({ flavor: "release", id: import_node_crypto.default.randomUUID(), providerName: this.providerName }));
+      const redirectURI = redirectFor(this.redirectMethod);
+      return {
+        codeVerifier,
+        codeChallenge,
+        state,
+        redirectURI,
+        toURL: () => {
+          const url = new URL(options.endpoint);
+          const set = (key2, value) => value != null && url.searchParams.set(key2, String(value));
+          set("response_type", "code");
+          set("client_id", options.clientId);
+          set("redirect_uri", redirectURI);
+          set("scope", options.scope);
+          set("state", state);
+          set("code_challenge", codeChallenge);
+          set("code_challenge_method", "S256");
+          for (const [key2, value] of Object.entries(options.extraParameters || {})) set(key2, value);
+          return url.toString();
+        }
+      };
+    }
+    async authorize(options) {
+      const url = typeof options.toURL === "function" ? options.toURL() : options.url;
+      if (!url) throw new Error("OAuth: no authorization URL.");
+      let state = options.state;
+      try {
+        state = state || new URL(url).searchParams.get("state") || "";
+      } catch {
+      }
+      const go = await call2("confirm", [{
+        title: `Sign in to ${this.providerName}`,
+        message: this.description || `${manifest2.title || extensionName} needs your ${this.providerName} account. Your browser opens to sign in.`,
+        confirm: "Sign In",
+        destructive: false
+      }]);
+      if (!go) throw new Error(`Sign-in to ${this.providerName} was cancelled.`);
+      const answer = await call2("oauth", [{ url, state, provider: this.providerName }]);
+      return { authorizationCode: answer.code };
+    }
+    async setTokens(tokens) {
+      const data = {
+        accessToken: tokens.accessToken ?? tokens.access_token,
+        refreshToken: tokens.refreshToken ?? tokens.refresh_token,
+        idToken: tokens.idToken ?? tokens.id_token,
+        expiresIn: tokens.expiresIn ?? tokens.expires_in,
+        scope: tokens.scope,
+        updatedAt: Date.now()
+      };
+      import_node_fs.default.writeFileSync(this.tokensPath, JSON.stringify(data), { mode: 384 });
+      import_node_fs.default.chmodSync(this.tokensPath, 384);
+    }
+    async getTokens() {
+      try {
+        const data = JSON.parse(import_node_fs.default.readFileSync(this.tokensPath, "utf8"));
+        return data.accessToken ? new TokenSet(data) : void 0;
+      } catch {
+        return void 0;
+      }
+    }
+    async removeTokens() {
+      import_node_fs.default.rmSync(this.tokensPath, { force: true });
+    }
+  }
   const open = async (target, application) => {
     const app = typeof application === "string" ? application : application?.path || application?.name;
     if (app && import_node_fs.default.existsSync(app) && app.endsWith(".desktop")) detached("gtk-launch", [import_node_path.default.basename(app), target]);
@@ -10313,14 +10410,7 @@ function createApi(ctx) {
       setWindowBounds: unsupported("WindowManagement"),
       DesktopType: nestedEnums.WindowManagement.DesktopType
     },
-    OAuth: {
-      ...nestedEnums.OAuth,
-      PKCEClient: class {
-        constructor() {
-          throw new Error("OAuth sign-in is not available in EchoSpot yet.");
-        }
-      }
-    },
+    OAuth: { ...nestedEnums.OAuth, PKCEClient },
     __settle: async () => {
       while (inFlight.size) await Promise.allSettled([...inFlight]);
     }

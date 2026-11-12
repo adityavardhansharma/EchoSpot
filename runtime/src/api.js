@@ -243,6 +243,104 @@ export function createApi(ctx) {
     return Boolean(confirmed);
   };
 
+  // ---- OAuth -------------------------------------------------------------------------------
+  // The provider sends the browser back to Raycast's redirect page, which opens a
+  // `raycast://oauth` link; EchoSpot is that link's handler and answers the waiting `authorize`.
+  const base64url = (buffer) => Buffer.from(buffer).toString("base64url");
+  const redirectFor = (method) => {
+    if (method === "app") return "raycast://oauth?package_name=Extension";
+    if (method === "appURI") return "com.raycast:/oauth?package_name=Extension";
+    return "https://raycast.com/redirect?packageName=Extension";
+  };
+  class TokenSet {
+    constructor(data) {
+      this.accessToken = data.accessToken;
+      this.refreshToken = data.refreshToken;
+      this.idToken = data.idToken;
+      this.expiresIn = data.expiresIn;
+      this.scope = data.scope;
+      this.updatedAt = new Date(data.updatedAt || Date.now());
+    }
+    isExpired() {
+      if (this.expiresIn == null) return false;
+      // Ten seconds early, so a token is not handed over as it lapses.
+      return this.updatedAt.getTime() + (Number(this.expiresIn) - 10) * 1000 < Date.now();
+    }
+  }
+  class PKCEClient {
+    constructor(options = {}) {
+      this.redirectMethod = options.redirectMethod;
+      this.providerName = options.providerName || extensionName;
+      this.providerIcon = options.providerIcon;
+      this.providerId = options.providerId;
+      this.description = options.description;
+      const id = String(this.providerId || this.providerName).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      this.tokensPath = path.join(supportPath, `oauth-${id}.json`);
+    }
+    async authorizationRequest(options) {
+      const codeVerifier = base64url(crypto.randomBytes(48));
+      const codeChallenge = base64url(crypto.createHash("sha256").update(codeVerifier).digest());
+      // Raycast's redirect page only passes a state on when it is JSON it recognises.
+      const state = base64url(JSON.stringify({ flavor: "release", id: crypto.randomUUID(), providerName: this.providerName }));
+      const redirectURI = redirectFor(this.redirectMethod);
+      return {
+        codeVerifier, codeChallenge, state, redirectURI,
+        toURL: () => {
+          const url = new URL(options.endpoint);
+          const set = (key, value) => value != null && url.searchParams.set(key, String(value));
+          set("response_type", "code");
+          set("client_id", options.clientId);
+          set("redirect_uri", redirectURI);
+          set("scope", options.scope);
+          set("state", state);
+          set("code_challenge", codeChallenge);
+          set("code_challenge_method", "S256");
+          for (const [key, value] of Object.entries(options.extraParameters || {})) set(key, value);
+          return url.toString();
+        },
+      };
+    }
+    async authorize(options) {
+      const url = typeof options.toURL === "function" ? options.toURL() : options.url;
+      if (!url) throw new Error("OAuth: no authorization URL.");
+      let state = options.state;
+      try {
+        state = state || new URL(url).searchParams.get("state") || "";
+      } catch {}
+      const go = await call("confirm", [{
+        title: `Sign in to ${this.providerName}`,
+        message: this.description || `${manifest.title || extensionName} needs your ${this.providerName} account. Your browser opens to sign in.`,
+        confirm: "Sign In", destructive: false,
+      }]);
+      if (!go) throw new Error(`Sign-in to ${this.providerName} was cancelled.`);
+      const answer = await call("oauth", [{ url, state, provider: this.providerName }]);
+      return { authorizationCode: answer.code };
+    }
+    async setTokens(tokens) {
+      const data = {
+        accessToken: tokens.accessToken ?? tokens.access_token,
+        refreshToken: tokens.refreshToken ?? tokens.refresh_token,
+        idToken: tokens.idToken ?? tokens.id_token,
+        expiresIn: tokens.expiresIn ?? tokens.expires_in,
+        scope: tokens.scope,
+        updatedAt: Date.now(),
+      };
+      fs.writeFileSync(this.tokensPath, JSON.stringify(data), { mode: 0o600 });
+      fs.chmodSync(this.tokensPath, 0o600);
+    }
+    async getTokens() {
+      try {
+        const data = JSON.parse(fs.readFileSync(this.tokensPath, "utf8"));
+        return data.accessToken ? new TokenSet(data) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+    async removeTokens() {
+      fs.rmSync(this.tokensPath, { force: true });
+    }
+  }
+
   // ---- System ------------------------------------------------------------------------------
   const open = async (target, application) => {
     const app = typeof application === "string" ? application : application?.path || application?.name;
@@ -449,14 +547,7 @@ export function createApi(ctx) {
       getActiveWindow: unsupported("WindowManagement"), getWindowsOnActiveDesktop: unsupported("WindowManagement"),
       getDesktops: unsupported("WindowManagement"), setWindowBounds: unsupported("WindowManagement"), DesktopType: enums.nestedEnums.WindowManagement.DesktopType,
     },
-    OAuth: {
-      ...enums.nestedEnums.OAuth,
-      PKCEClient: class {
-        constructor() {
-          throw new Error("OAuth sign-in is not available in EchoSpot yet.");
-        }
-      },
-    },
+    OAuth: { ...enums.nestedEnums.OAuth, PKCEClient },
     __settle: async () => {
       while (inFlight.size) await Promise.allSettled([...inFlight]);
     },
