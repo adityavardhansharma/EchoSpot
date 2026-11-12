@@ -267,6 +267,13 @@ fn detail_pane(s: &App, p: &Palette, scale: f32, detail: &Detail) -> El {
         .child(col().w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(24.0).child(c))
 }
 
+/// A page of Markdown, the width of the palette.
+fn page_body(p: &Palette, source: &str) -> El {
+    col().pin(FULL, FULL, FULL, FULL).pt(size::HEADER_BAND).pb(size::BOTTOM_BAR_H)
+        .child(col().key("list").w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(28.0)
+            .child(col().w_full().px(space::XXL + space::XS).pb(space::XL).child(crate::ext::view::markdown(p, source))))
+}
+
 fn split_body(s: &App, p: &Palette, scale: f32, screen: &Screen) -> El {
     if screen.items.is_empty() {
         return el().pin(FULL, FULL, FULL, FULL).child(empty_state(p, screen));
@@ -414,6 +421,8 @@ fn header(s: &App, p: &Palette, screen: &Screen) -> El {
         .gap(space::XL + 2.0).center_y().child(lead);
     if let Some(form) = &s.form {
         bar = bar.child(text(form.title.clone()).font(type_::SEARCH).color(p.text).grow(1.0));
+    } else if let (Route::Page, Some(page)) = (&screen.route, &s.page) {
+        bar = bar.child(text(page.title.clone()).font(type_::SEARCH).color(p.text).truncate().grow(1.0));
     } else {
         bar = bar.child(text_input(&screen.query, type_::SEARCH).key("search").single_line().grow(1.0).color(p.text)
             .placeholder(screen.placeholder.clone(), p.text_tertiary).no_focus_ring()
@@ -632,6 +641,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (None, Layout::List) => match &screen.route {
             Route::Ext(id) => crate::ext::view::body(s, &p, scale, *id).unwrap_or_else(|| list_body(s, &p, scale, screen)),
             Route::Ai if !s.chat.messages.is_empty() => crate::features::ai::body(s, &p),
+            Route::Page if s.page.is_some() => page_body(&p, s.page.as_ref().map(|page| page.markdown.as_str()).unwrap_or("")),
             _ => list_body(s, &p, scale, screen),
         },
         (None, Layout::Split) => split_body(s, &p, scale, screen),
