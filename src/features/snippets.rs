@@ -31,10 +31,13 @@ fn path() -> std::path::PathBuf {
 
 impl Snippets {
     pub fn load() -> Self {
-        Self { list: util::read_json(&path()) }
+        let snippets = Self { list: util::read_json(&path()) };
+        crate::features::expander::set_snippets(&snippets.list);
+        snippets
     }
     fn save(&self) {
         util::write_json(&path(), &self.list);
+        crate::features::expander::set_snippets(&self.list);
     }
 }
 
@@ -98,7 +101,8 @@ fn form(existing: Option<&Snippet>) -> Form {
             Field::new("name", "Name", FieldKind::Text).value(&s.name).placeholder("Email signature").required(),
             Field::new("text", "Snippet", FieldKind::Area).value(&s.text).placeholder("The text to insert").required()
                 .info("{date}, {time}, {datetime}, {clipboard} and {uuid} fill in when the snippet is used."),
-            Field::new("keyword", "Keyword", FieldKind::Text).value(&s.keyword).placeholder("Optional, for search"),
+            Field::new("keyword", "Keyword", FieldKind::Text).value(&s.keyword).placeholder("Optional, e.g. ;sig")
+                .info("Found by this in search. With \"Expand snippets as you type\" on in Settings, typing it in any app inserts the snippet."),
         ],
         Target::Snippet(existing.map(|s| s.id.clone())),
     )
