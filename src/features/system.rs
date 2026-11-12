@@ -220,7 +220,7 @@ pub fn run(action: SystemAction) -> Outcome {
             quiet()
         }
         Logout => {
-            first_available(&[("omarchy-system-logout", "omarchy-system-logout"), ("uwsm", "uwsm stop"), ("hyprctl", "hyprctl dispatch exit")]);
+            first_available(&[("omarchy-system-logout", "omarchy-system-logout"), ("uwsm", "uwsm stop"), ("hyprctl", "hyprctl dispatch 'hl.dsp.exit()' || hyprctl dispatch exit")]);
             quiet()
         }
         VolumeUp => {
