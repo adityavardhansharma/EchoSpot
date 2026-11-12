@@ -387,10 +387,12 @@ impl App {
         query.focused = true;
         let entries = vec![
             Action::new("Settings…", &icons::GEAR, Act::OpenSettings(String::new())).keys("ctrl+,"),
+            Action::new("AI Chat", &icons::AI, Act::Ai(AiOp::Open(String::new()))),
             Action::new("Extension Store", &icons::STORE, Act::Push(Route::Store)),
             Action::new("Manage Extensions", &icons::PUZZLE, Act::Push(Route::Extensions)),
             Action::new("Reload Applications", &icons::REFRESH, Act::Toast("reload".into())),
-            Action::new("About EchoSpot", &icons::INFO, Act::OpenUrl("https://github.com/adityavardhansharma/echospot".into())).section(""),
+            Action::new("Keyboard Shortcuts", &icons::KEYBOARD, Act::OpenSettings("shortcuts".into())).section(""),
+            Action::new("About EchoSpot", &icons::LOGO, Act::OpenSettings("about".into())),
             Action::new("Quit EchoSpot", &icons::POWER, Act::Quit).keys("ctrl+q"),
         ];
         self.menu = Some(Menu { kind: MenuKind::Main, query, sel: 0, entries });
@@ -594,7 +596,8 @@ impl App {
             Act::Quicklink(op) => features::quicklinks::perform(self, op, tx),
             Act::Confirm(confirm) => {
                 self.menu = None;
-                self.dialog_sel = 1;
+                // Return confirms, except where it can't be undone: there it lands on Cancel.
+                self.dialog_sel = if confirm.destructive { 0 } else { 1 };
                 self.dialog = Some(*confirm);
             }
             Act::Ext(act) => crate::ext::perform(self, act, tx),
