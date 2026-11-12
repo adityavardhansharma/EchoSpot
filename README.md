@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/echospot.svg" width="128" height="128" alt="EchoSpot logo"></p>
+
 # EchoSpot
 
 A native Raycast alternative for Omarchy, built with [Rune](https://github.com/anomalyco/rune).

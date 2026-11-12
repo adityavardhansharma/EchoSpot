@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect width="256" height="256" rx="60" fill="#0B0B0C"/>
+  <!-- the palette: a search bar holding the spot -->
+  <rect x="44" y="66" width="168" height="56" rx="28" fill="#EDEDEF"/>
+  <circle cx="72" cy="94" r="13" fill="#FF6A3D"/>
+  <!-- its echoes: the results, each fainter than the last -->
+  <rect x="44" y="140" width="168" height="16" rx="8" fill="#EDEDEF" opacity=".55"/>
+  <rect x="44" y="174" width="120" height="16" rx="8" fill="#EDEDEF" opacity=".28"/>
+</svg>
