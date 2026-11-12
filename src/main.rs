@@ -127,6 +127,8 @@ fn main() {
         state.me = Some(me);
         if show_now {
             state.will_show();
+        } else {
+            state.read_status();
         }
         if let Some(route) = open_route.as_deref().and_then(ipc::route) {
             state.screens.push(app::Screen::new(route));

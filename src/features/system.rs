@@ -128,6 +128,45 @@ pub fn available(action: SystemAction) -> bool {
     }
 }
 
+/// What the machine's switches say right now, for the rows that flip them. `None` where it
+/// could not be read.
+#[derive(Clone, Default, Debug)]
+pub struct Status {
+    pub wifi: Option<bool>,
+    pub bluetooth: Option<bool>,
+    pub muted: Option<bool>,
+    pub mic_muted: Option<bool>,
+    pub volume: Option<u32>,
+}
+
+/// Reads the switches. Blocking, a few tens of milliseconds: call from a worker.
+pub fn status() -> Status {
+    let sink = sh_output("wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null");
+    let source = sh_output("wpctl get-volume @DEFAULT_AUDIO_SOURCE@ 2>/dev/null");
+    Status {
+        wifi: has_program("nmcli").then(|| sh_output("nmcli -t radio wifi 2>/dev/null")).flatten().map(|o| o.trim() == "enabled"),
+        // bluetoothctl waits on its daemon; a machine without one must not hold this up.
+        bluetooth: has_program("bluetoothctl").then(|| sh_output("timeout 1 bluetoothctl show 2>/dev/null | grep -m1 Powered")).flatten()
+            .filter(|o| !o.is_empty()).map(|o| o.contains("yes")),
+        muted: sink.as_ref().map(|o| o.contains("MUTED")),
+        mic_muted: source.map(|o| o.contains("MUTED")),
+        volume: sink.and_then(|o| o.split_whitespace().nth(1).and_then(|v| v.parse::<f32>().ok())).map(|v| (v * 100.0).round() as u32),
+    }
+}
+
+/// The state a command's row shows at its trailing edge, and whether that state is "on".
+pub fn state(action: SystemAction, status: &Status) -> Option<(String, bool)> {
+    let on_off = |on: bool| (if on { "On" } else { "Off" }.to_string(), on);
+    match action {
+        ToggleWifi => status.wifi.map(on_off),
+        ToggleBluetooth => status.bluetooth.map(on_off),
+        ToggleMute => status.muted.map(|m| (if m { "Muted" } else { "Sound On" }.to_string(), !m)),
+        ToggleMicMute => status.mic_muted.map(|m| (if m { "Muted" } else { "Live" }.to_string(), !m)),
+        VolumeUp | VolumeDown => status.volume.map(|v| (format!("{v}%"), false)),
+        _ => None,
+    }
+}
+
 /// What a command leaves behind: whether the palette closes first, and what to say after.
 pub struct Outcome {
     pub message: Option<String>,

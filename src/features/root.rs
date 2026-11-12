@@ -113,9 +113,13 @@ fn entries(app: &App) -> Vec<Entry> {
             })),
             None => run,
         };
-        let item = Item::new(id.clone(), c.title, IconSrc::Badge(c.icon, system::tint(c.action))).trailing("Command")
+        let mut item = Item::new(id.clone(), c.title, IconSrc::Badge(c.icon, system::tint(c.action))).trailing("Command")
             .action(Action::new("Run Command", &icons::BOLT, act))
             .action(favorite_action(app, &id));
+        // A switch says where it stands before it is flipped.
+        if let Some((label, on)) = system::state(c.action, &app.status) {
+            item.accessories.push(Accessory { text: label, tag: on.then(|| crate::theme::Tint::Green.stops().0) });
+        }
         out.push(Entry { item, keywords: c.keywords.into() });
     }
     if windows::hyprland() {

@@ -112,6 +112,8 @@ pub struct App {
     pub backdrop: rune::Pixels,
     pub has_backdrop: bool,
     pub was_focused: bool,
+    /// What the system's switches read when last asked: the state on a toggle's row.
+    pub status: system::Status,
     /// When the selection last moved by key, to tell a held key from a press.
     last_step: f64,
     /// The extension call a confirm dialog answers: session and call id.
@@ -148,6 +150,7 @@ impl App {
             backdrop: rune::Pixels::new(),
             has_backdrop: false,
             was_focused: false,
+            status: system::Status::default(),
             last_step: f64::NEG_INFINITY,
             dialog_reply: None,
         };
@@ -279,6 +282,21 @@ impl App {
         self.was_focused = false;
         self.hide_on_blur = true;
         self.refresh();
+        self.read_status();
+    }
+
+    /// Reads the system's switches off the UI thread; the rows that show them update when it lands.
+    pub fn read_status(&self) {
+        let Some(me) = self.me.clone() else { return };
+        std::thread::spawn(move || {
+            let status = system::status();
+            me.update(move |s, _| {
+                s.status = status;
+                if s.top().route == Route::Root {
+                    s.refresh_keeping();
+                }
+            });
+        });
     }
 
     pub fn toast(&mut self, text: impl Into<String>, tone: Tone) {
@@ -561,6 +579,7 @@ impl App {
                         self.toast(message, if out.ok { Tone::Success } else { Tone::Neutral });
                     }
                     let _ = cmd;
+                    self.read_status();
                 }
             }
             Act::Window(op) => {
