@@ -67,6 +67,15 @@ fn encode(s: &str) -> String {
 }
 
 fn fetch(query: &str) -> Vec<Listing> {
+    // With nothing typed the store's own featured shelf leads, most installed first; an empty
+    // search would return listings in no useful order.
+    if query.trim().is_empty() {
+        let mut featured = net::get("https://www.raycast.com/frontend_api/extensions/featured?per_page=40").map(|body| parse(&body)).unwrap_or_default();
+        if !featured.is_empty() {
+            featured.sort_by(|a, b| b.downloads.cmp(&a.downloads));
+            return featured;
+        }
+    }
     let url = format!("https://www.raycast.com/frontend_api/extensions/search?q={}&per_page=40", encode(query));
     net::get(&url).map(|body| parse(&body)).unwrap_or_default()
 }
@@ -133,7 +142,7 @@ pub fn build(app: &mut App, query: &str) -> Built {
         item.action(Action::new("Open in Browser", &icons::GLOBE, Act::OpenUrl(l.store_url.clone())).keys("ctrl+o"))
     }).collect();
     let mut sections = Sections::default();
-    sections.push(if query.trim().is_empty() { "Popular" } else { "Results" }, items);
+    sections.push(if query.trim().is_empty() { "Featured" } else { "Results" }, items);
     Built::list(sections, "Search the Raycast Store...").layout(Layout::Split).loading(store.pending()).keep()
         .empty(if store.pending() { "Loading the Store…" } else { "No Extensions Found" }, if store.pending() { "" } else { "Check the connection, or try another search." })
 }
