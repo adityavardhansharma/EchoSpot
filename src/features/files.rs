@@ -143,6 +143,7 @@ fn item(path: &Path) -> Item {
         .action(Action::new("Show in File Manager", &icons::FOLDER, Act::Reveal(path.to_path_buf())).keys("ctrl+enter"))
         .action(Action::new("Copy Path", &icons::COPY, Act::Copy(path.display().to_string())).keys("ctrl+shift+c"))
         .action(Action::new("Copy File", &icons::CLIPBOARD, Act::CopyFile(path.to_path_buf())).keys("ctrl+shift+f"))
+        .action(Action::new("Ask AI About This File", &icons::AI, Act::Ai(AiOp::Attach(path.to_path_buf()))).keys("ctrl+shift+a"))
         .action(Action::new("Open Terminal Here", &icons::TERMINAL, Act::Spawn(vec![
             "sh".into(), "-c".into(), format!("cd {} && exec xdg-terminal-exec", util::quote(&dir.display().to_string())),
         ])).keys("ctrl+t").section(""))
