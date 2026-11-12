@@ -26,6 +26,8 @@ static HOST: &str = include_str!("../../runtime/dist/host.cjs");
 
 #[derive(Clone, Debug)]
 pub enum ExtAct {
+    /// Turn a command's scheduled runs on or off, by its row id.
+    Background(String),
     /// Start a command: extension directory name, command name.
     Run(String, String),
     /// Call a handler in a running command.
@@ -59,6 +61,8 @@ pub struct CommandInfo {
     pub mode: String,
     pub preferences: Vec<Preference>,
     pub icon: Option<PathBuf>,
+    /// How often the manifest asks for the command to run on its own, in seconds.
+    pub interval: Option<u64>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -92,6 +96,8 @@ pub struct Session {
     hud: Option<String>,
     /// Whether the search bar's dropdown has announced its starting value.
     dropdown_ready: bool,
+    /// Started by the schedule, not by a person: it runs and ends without a word.
+    pub background: bool,
 }
 
 impl Session {
@@ -128,6 +134,19 @@ pub struct Extensions {
     waker: Option<Waker>,
     next_id: u64,
     pub store: store::Store,
+    /// What each command last said of itself with `updateCommandMetadata`, by row id.
+    pub metadata: HashMap<String, String>,
+    /// The commands allowed to run on their manifest's interval, by row id, and when each last did.
+    pub background: Vec<String>,
+    last_run: HashMap<String, u64>,
+}
+
+fn metadata_path() -> PathBuf {
+    util::data_dir().join("command-metadata.json")
+}
+
+fn background_path() -> PathBuf {
+    util::config_dir().join("background.json")
 }
 
 pub fn extensions_dir() -> PathBuf {
@@ -173,16 +192,32 @@ fn asset(dir: &Path, name: &str) -> Option<PathBuf> {
     [dir.join("assets").join(name), dir.join(name)].into_iter().find(|p| p.is_file())
 }
 
+/// A manifest's `interval`: `90s`, `10m`, `1h`, `1d`. Never oftener than once a minute.
+pub fn parse_interval(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let split = text.find(|c: char| !c.is_ascii_digit())?;
+    let n: u64 = text[..split].parse().ok()?;
+    let unit = match text[split..].trim() {
+        "s" => 1,
+        "m" => 60,
+        "h" => 3600,
+        "d" => 86_400,
+        _ => return None,
+    };
+    Some((n * unit).max(60))
+}
+
 fn read_manifest(dir: &Path) -> Option<Installed> {
     let manifest: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("package.json")).ok()?).ok()?;
     let s = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let icon = asset(dir, &s(&manifest, "icon"));
     let commands = manifest.get("commands")?.as_array()?.iter()
         .filter(|c| dir.join(format!("{}.js", s(c, "name"))).is_file())
-        .filter(|c| matches!(s(c, "mode").as_str(), "view" | "no-view"))
+        .filter(|c| matches!(s(c, "mode").as_str(), "view" | "no-view" | "menu-bar"))
         .map(|c| CommandInfo {
             name: s(c, "name"), title: s(c, "title"), subtitle: s(c, "subtitle"), description: s(c, "description"), mode: s(c, "mode"),
             preferences: parse_preferences(c.get("preferences")), icon: asset(dir, &s(c, "icon")).or_else(|| icon.clone()),
+            interval: parse_interval(&s(c, "interval")),
         }).collect();
     Some(Installed {
         id: dir.file_name()?.to_string_lossy().to_string(),
@@ -200,7 +235,8 @@ fn read_manifest(dir: &Path) -> Option<Installed> {
 impl Extensions {
     pub fn load() -> Self {
         let (tx, rx) = channel();
-        let mut ext = Self { installed: Vec::new(), sessions: Vec::new(), sign_ins: Vec::new(), tx, rx, waker: None, next_id: 1, store: store::Store::default() };
+        let mut ext = Self { installed: Vec::new(), sessions: Vec::new(), sign_ins: Vec::new(), tx, rx, waker: None, next_id: 1, store: store::Store::default(),
+            metadata: util::read_json(&metadata_path()), background: util::read_json(&background_path()), last_run: HashMap::new() };
         ext.rescan();
         ext
     }
@@ -312,8 +348,8 @@ impl Extensions {
         let stdin = child.stdin.take();
         self.sessions.push(Session {
             id, extension: ext.id.clone(), command: command.name.clone(), title: command.title.clone(),
-            view: command.mode == "view", child, stdin, tree: Value::Null, depth: 1, ready: false,
-            sent_search: String::new(), hud: None, dropdown_ready: false,
+            view: command.mode != "no-view", child, stdin, tree: Value::Null, depth: 1, ready: false,
+            sent_search: String::new(), hud: None, dropdown_ready: false, background: false,
         });
         Ok(id)
     }
@@ -585,8 +621,20 @@ pub fn commands(app: &App) -> Vec<(Item, String)> {
                     title: format!("Uninstall {}?", ext.title), message: "Its commands and saved preferences are removed.".into(),
                     icon: &icons::TRASH, confirm: "Uninstall".into(), destructive: true, act: Act::Ext(ExtAct::Uninstall(ext.id.clone())),
                 }))).destructive());
-            if !cmd.subtitle.is_empty() {
-                item.subtitle = Some(cmd.subtitle.clone());
+            // What the command last said of itself wins over the manifest's fixed line.
+            match app.ext.metadata.get(&id).filter(|s| !s.is_empty()) {
+                Some(said) => item.subtitle = Some(said.clone()),
+                None if !cmd.subtitle.is_empty() => item.subtitle = Some(cmd.subtitle.clone()),
+                None => {}
+            }
+            if let Some(every) = cmd.interval {
+                let on = app.ext.background.contains(&id);
+                let pace = if every % 86_400 == 0 { format!("{}d", every / 86_400) } else if every % 3600 == 0 { format!("{}h", every / 3600) } else { format!("{}m", every / 60) };
+                item = item.action(Action::new(if on { format!("Turn Background Refresh Off (every {pace})") } else { format!("Turn Background Refresh On (every {pace})") },
+                    &icons::REFRESH, Act::Ext(ExtAct::Background(id.clone()))));
+                if on {
+                    item.accessories.push(Accessory { icon: Some(&icons::REFRESH), text: pace, tag: None });
+                }
             }
             out.push((item, format!("{} {} {}", ext.title, cmd.description, ext.name)));
         }
@@ -684,6 +732,33 @@ pub fn open_form_actions(app: &mut App, session: u64) {
     }
 }
 
+/// Runs whichever background commands have come due. Called twice a minute.
+pub fn tick(app: &mut App) {
+    if !util::has_program("node") {
+        return;
+    }
+    let now = util::now_secs();
+    let due: Vec<(Installed, CommandInfo, String)> = app.ext.installed.iter().flat_map(|ext| ext.commands.iter().map(move |cmd| (ext, cmd))).filter_map(|(ext, cmd)| {
+        let row = format!("ext:{}:{}", ext.id, cmd.name);
+        let every = cmd.interval?;
+        let due = app.ext.background.contains(&row) && now.saturating_sub(app.ext.last_run.get(&row).copied().unwrap_or(0)) >= every;
+        // One run at a time: a command still going is not started on top of itself, and a
+        // command that needs preferences it lacks would only fail.
+        let running = app.ext.sessions.iter().any(|s| s.extension == ext.id && s.command == cmd.name);
+        (due && !running && !missing_preferences(ext, cmd)).then(|| (ext.clone(), cmd.clone(), row))
+    }).collect();
+    for (ext, cmd, row) in due {
+        app.ext.last_run.insert(row, now);
+        let launch = json!({ "appearance": "dark", "frontmost": Value::Null, "arguments": {}, "ai": app.settings.ai.missing().is_none(), "launchType": "background" });
+        if let Ok(id) = app.ext.start(&ext, &cmd, launch)
+            && let Some(session) = app.ext.session_mut(id) {
+            session.background = true;
+            // No screen shows it, so it is a no-view run as far as the palette goes.
+            session.view = false;
+        }
+    }
+}
+
 pub fn perform(app: &mut App, act: ExtAct, tx: &mut Tx) {
     match act {
         ExtAct::Run(ext_id, command) => {
@@ -693,10 +768,11 @@ pub fn perform(app: &mut App, act: ExtAct, tx: &mut Tx) {
                 return forms::open(app, preference_form(&ext, Some(&cmd), Some(cmd.name.clone())), tx);
             }
             app.usage.record(&format!("ext:{}:{}", ext.id, cmd.name));
-            let frontmost = app.prev_window.as_ref().map(|w| json!({ "name": w.class, "bundleId": w.class })).unwrap_or(Value::Null);
-            let launch = json!({ "appearance": "dark", "frontmost": frontmost, "arguments": {} });
+            let frontmost = app.prev_window.as_ref().map(|w| json!({ "name": w.class, "bundleId": w.class, "address": w.address })).unwrap_or(Value::Null);
+            let launch = json!({ "appearance": "dark", "frontmost": frontmost, "arguments": {}, "ai": app.settings.ai.missing().is_none(), "launchType": "userInitiated" });
             match app.ext.start(&ext, &cmd, launch) {
-                Ok(id) if cmd.mode == "view" => app.push(Route::Ext(id), tx),
+                // A menu-bar command has no menu bar here: its menu opens as a list.
+                Ok(id) if cmd.mode != "no-view" => app.push(Route::Ext(id), tx),
                 Ok(_) => app.toast(format!("Running {}…", cmd.title), Tone::Progress),
                 Err(error) => app.toast(error, Tone::Danger),
             }
@@ -731,6 +807,13 @@ pub fn perform(app: &mut App, act: ExtAct, tx: &mut Tx) {
                 app.refresh();
                 app.toast(format!("{} Uninstalled", ext.title), Tone::Success);
             }
+        }
+        ExtAct::Background(row) => {
+            let on = !app.ext.background.contains(&row);
+            if on { app.ext.background.push(row); } else { app.ext.background.retain(|r| *r != row); }
+            util::write_json(&background_path(), &app.ext.background);
+            app.refresh_keeping();
+            app.toast(if on { "Background Refresh On" } else { "Background Refresh Off" }, Tone::Success);
         }
         ExtAct::Configure(id) => {
             if let Some(ext) = app.ext.get(&id).cloned() {
@@ -771,6 +854,10 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                 let method = message.get("method").and_then(Value::as_str).unwrap_or("");
                 let args = message.get("args").and_then(Value::as_array).cloned().unwrap_or_default();
                 let call_id = message.get("id").and_then(Value::as_u64).unwrap_or(0);
+                // A scheduled run has no audience: what it would show is dropped.
+                if app.ext.session(id).is_some_and(|s| s.background) && matches!(method, "toast" | "hud" | "closeMainWindow" | "popToRoot" | "clearSearchBar" | "confirm" | "openPreferences") {
+                    continue;
+                }
                 match method {
                     "toast" => {
                         let t = args.first().cloned().unwrap_or(Value::Null);
@@ -853,6 +940,37 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                             util::open_url(&url);
                         });
                     }
+                    "commandMetadata" => {
+                        let command = app.ext.session(id).map(|s| s.command.clone()).unwrap_or_default();
+                        let row = format!("ext:{extension}:{command}");
+                        match args.first().and_then(|o| o.get("subtitle")).and_then(Value::as_str).filter(|s| !s.is_empty()) {
+                            Some(subtitle) => { app.ext.metadata.insert(row, subtitle.to_string()); }
+                            None => { app.ext.metadata.remove(&row); }
+                        }
+                        util::write_json(&metadata_path(), &app.ext.metadata);
+                        if app.top().route == Route::Root {
+                            app.refresh_keeping();
+                        }
+                    }
+                    "aiAsk" => {
+                        // The request runs here, with the person's own provider: the key never
+                        // enters the extension's process.
+                        let prompt = text_of(args.first());
+                        let settings = app.settings.ai.clone();
+                        if let Some(me) = app.me.clone() {
+                            std::thread::spawn(move || {
+                                let answer = crate::features::ai::one_shot(&settings, &prompt);
+                                me.update(move |s: &mut App, _| {
+                                    if let Some(session) = s.ext.session_mut(id) {
+                                        session.send(match answer {
+                                            Ok(text) => json!({ "t": "reply", "id": call_id, "ok": true, "value": text }),
+                                            Err(e) => json!({ "t": "reply", "id": call_id, "ok": false, "value": e }),
+                                        });
+                                    }
+                                });
+                            });
+                        }
+                    }
                     "openPreferences" => {
                         if let Some(ext) = app.ext.get(&extension).cloned() {
                             forms::open(app, preference_form(&ext, None, None), tx);
@@ -872,6 +990,9 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
             "error" => {
                 let text = text_of(message.get("text"));
                 log_line(&extension, "error", &text);
+                if app.ext.session(id).is_some_and(|s| s.background) {
+                    continue;
+                }
                 app.toast(util::truncate(text.lines().next().unwrap_or("The extension failed"), 90), Tone::Danger);
                 changed = true;
             }
