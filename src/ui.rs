@@ -97,6 +97,13 @@ pub fn icon_slot(s: &App, p: &Palette, scale: f32, src: &IconSrc, slot: f32) -> 
             None => glyph_tile(p, &icons::IMAGE, slot, None),
         },
         IconSrc::Emoji(e) => el().size(slot, slot).center().child(text(e.clone()).font(TextStyle::new(slot * 0.72, 400.0).lh(slot))),
+        IconSrc::Monogram(label, c) => {
+            let tile = slot - 3.0;
+            let size = if label.chars().count() > 2 { tile * 0.40 } else { tile * 0.52 };
+            el().size(slot, slot).center().child(el().size(tile, tile).radius(tile * 0.28).center().fill(*c)
+                .border_gradient(1.0, Color::WHITE.alpha(0.36), Color::WHITE.alpha(0.04))
+                .child(text(label.clone()).font(TextStyle::new(size.round(), 650.0).lh(tile)).color(Color::WHITE)))
+        }
         IconSrc::Swatch(c) => el().size(slot, slot).center()
             .child(el().size(slot - 4.0, slot - 4.0).radius(radius::THUMBNAIL).fill(*c).border(1.0, Color::WHITE.alpha(0.14))),
     }
@@ -140,7 +147,16 @@ fn result_row(s: &App, p: &Palette, scale: f32, item: &Item, index: usize, selec
             r = r.child(match a.tag {
                 Some(c) => row().px(space::SM).py(space::XXS).radius(radius::MENU).fill(c.alpha(0.18))
                     .child(text(a.text.clone()).font(type_::ROW_TRAILING).color(c)),
-                None => text(a.text.clone()).font(type_::ROW_TRAILING).color(p.text_secondary),
+                None => {
+                    let mut cell = row().gap(space::XS).center_y();
+                    if let Some(glyph) = a.icon {
+                        cell = cell.child(icon(glyph, 12.0).color(p.text_tertiary));
+                    }
+                    if !a.text.is_empty() {
+                        cell = cell.child(text(a.text.clone()).font(type_::ROW_TRAILING).color(p.text_secondary));
+                    }
+                    cell
+                }
             });
         }
         if !item.trailing.is_empty() {

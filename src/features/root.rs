@@ -118,7 +118,7 @@ fn entries(app: &App) -> Vec<Entry> {
             .action(favorite_action(app, &id));
         // A switch says where it stands before it is flipped.
         if let Some((label, on)) = system::state(c.action, &app.status) {
-            item.accessories.push(Accessory { text: label, tag: on.then(|| crate::theme::Tint::Green.stops().0) });
+            item.accessories.push(Accessory { icon: None, text: label, tag: on.then(|| crate::theme::Tint::Green.stops().0) });
         }
         out.push(Entry { item, keywords: c.keywords.into() });
     }

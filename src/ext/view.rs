@@ -64,14 +64,19 @@ fn accessories(node: &Value) -> Vec<Accessory> {
         if let Some(tag) = a.get("tag") {
             let value = text_of(tag.get("value").or(Some(tag)));
             let color = tag.get("color").and_then(|c| raycast_color(c, true)).unwrap_or(Color::WHITE.alpha(0.7));
-            return (!value.is_empty()).then_some(Accessory { text: value, tag: Some(color) });
+            return (!value.is_empty()).then_some(Accessory { icon: None, text: value, tag: Some(color) });
         }
         let value = match a.get("text") {
             Some(Value::Object(o)) => text_of(o.get("value")),
             other => text_of(other),
         };
         let value = if value.is_empty() { a.get("date").map(|d| text_of(d.get("$date")).chars().take(10).collect()).unwrap_or_default() } else { value };
-        (!value.is_empty()).then_some(Accessory { text: value, tag: None })
+        // An accessory may be a glyph alone (a pin, a star) or a glyph beside its number.
+        let glyph = match a.get("icon").map(|i| icon_from(i, Path::new(""))) {
+            Some(IconSrc::Glyph(g)) | Some(IconSrc::Tinted(g, _)) => Some(g),
+            _ => None,
+        };
+        (!value.is_empty() || glyph.is_some()).then_some(Accessory { icon: glyph, text: value, tag: None })
     }).collect()
 }
 

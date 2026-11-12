@@ -306,6 +306,8 @@ fn log_line(extension: &str, level: &str, text: &str) {
 pub fn raycast_glyph(name: &str) -> &'static rune::Icon {
     let n = name.trim_end_matches("-16").trim_end_matches("-filled").to_lowercase();
     const TABLE: &[(&str, &rune::Icon)] = &[
+        ("arrow-up-circle", &icons::ARROW_UP), ("arrow-up", &icons::ARROW_UP), ("arrow-down", &icons::DOWNLOAD), ("arrow-left", &icons::ARROW_LEFT),
+        ("speech", &icons::CHAT), ("bubble", &icons::CHAT), ("message", &icons::CHAT), ("comment", &icons::CHAT),
         ("magnifying", &icons::SEARCH), ("search", &icons::SEARCH), ("clipboard", &icons::CLIPBOARD), ("copy", &icons::COPY),
         ("trash", &icons::TRASH), ("star", &icons::STAR), ("heart", &icons::HEART), ("gear", &icons::GEAR), ("cog", &icons::GEAR),
         ("globe", &icons::GLOBE), ("link", &icons::LINK), ("eye", &icons::EYE), ("pencil", &icons::PENCIL), ("edit", &icons::PENCIL),
@@ -357,6 +359,25 @@ pub fn raycast_color(value: &Value, p_dark: bool) -> Option<rune::Color> {
     rune::color::hex(hex)
 }
 
+/// An inline SVG that is a coloured box around a few characters (a rank badge, an avatar's
+/// initials), as the tile the palette would draw itself. The rasterizer sets no text, so the
+/// characters would otherwise be lost.
+fn svg_monogram(uri: &str) -> Option<IconSrc> {
+    let svg = uri.strip_prefix("data:image/svg+xml")?.split_once(',')?.1;
+    let svg = if svg.contains("%3C") { String::from_utf8_lossy(&net::percent_decode(svg)).to_string() } else { svg.to_string() };
+    let label = svg.split_once("<text")?.1.split_once('>')?.1.split_once("</text>")?.0.trim().to_string();
+    if label.is_empty() || label.chars().count() > 3 || label.contains('<') {
+        return None;
+    }
+    let attr = |tag: &str, name: &str| -> Option<String> {
+        let body = svg.split_once(tag)?.1.split_once('>')?.0.to_string();
+        let value = body.split_once(&format!("{name}=\""))?.1.split_once('"')?.0.to_string();
+        Some(value)
+    };
+    let fill = attr("<rect", "fill").or_else(|| attr("<circle", "fill")).and_then(|f| rune::color::hex(&f))?;
+    Some(IconSrc::Monogram(label, fill))
+}
+
 /// A Raycast `Image.ImageLike` as something the palette draws.
 pub fn icon_from(value: &Value, dir: &Path) -> IconSrc {
     match value {
@@ -366,7 +387,8 @@ pub fn icon_from(value: &Value, dir: &Path) -> IconSrc {
             Some(path) => IconSrc::File(path),
             None => IconSrc::Glyph(&icons::IMAGE),
         },
-        Value::String(s) if s.starts_with("data:") => IconSrc::Glyph(&icons::IMAGE),
+        Value::String(s) if s.starts_with("data:") => svg_monogram(s)
+            .or_else(|| net::data_uri(s).map(IconSrc::File)).unwrap_or(IconSrc::Glyph(&icons::IMAGE)),
         Value::String(s) => {
             if let Some(path) = asset(dir, s).or_else(|| Path::new(s).is_file().then(|| PathBuf::from(s))) {
                 return IconSrc::File(path);

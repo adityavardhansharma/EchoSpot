@@ -25,6 +25,8 @@ pub enum IconSrc {
     File(PathBuf),
     Emoji(String),
     Swatch(Color),
+    /// A few characters on a coloured tile: a rank, an initial.
+    Monogram(String, Color),
 }
 
 #[derive(Clone, Debug)]
@@ -207,6 +209,8 @@ pub struct Card {
 
 #[derive(Clone, Debug)]
 pub struct Accessory {
+    /// A small glyph before the text: an upvote arrow, a comment bubble.
+    pub icon: Option<&'static Icon>,
     pub text: String,
     pub tag: Option<Color>,
 }

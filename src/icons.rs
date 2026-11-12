@@ -60,6 +60,7 @@ icons! {
     GLOBE = r#"<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>"#;
     CALCULATOR = r#"<rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M8.5 7.5h7M8.5 12h.1M12 12h.1M15.5 12h.1M8.5 16h.1M12 16h.1M15.5 16h.1"/>"#;
     ARROW_RIGHT = r#"<path d="M4.5 12h15M13.5 6l6 6-6 6"/>"#;
+    ARROW_UP = r#"<path d="M12 19.500v-15M6 10.500l6-6 6 6"/>"#;
     ARROW_UP_RIGHT = r#"<path d="M7 17L17 7M8.5 7H17v8.5"/>"#;
     PLUS = r#"<path d="M12 5v14M5 12h14"/>"#;
     STAR = r#"<path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1.1 5.9-5.3-2.9-5.3 2.9 1.1-5.9-4.3-4.1 5.9-.8z"/>"#;

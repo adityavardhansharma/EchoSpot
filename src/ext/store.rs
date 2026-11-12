@@ -123,7 +123,7 @@ pub fn build(app: &mut App, query: &str) -> Built {
         detail.fields.push(("Status".into(), if installed { "Installed".into() } else { "Not installed".into() }));
         let busy = store.installing.as_deref() == Some(l.id().as_str());
         let mut item = Item::new(format!("store:{}", l.id()), l.title.clone(), icon).subtitle(l.author.clone()).detail(detail);
-        item.accessories.push(Accessory { text: if busy { "Installing…".into() } else if installed { "Installed".into() } else { count(l.downloads) }, tag: None });
+        item.accessories.push(Accessory { icon: None, text: if busy { "Installing…".into() } else if installed { "Installed".into() } else { count(l.downloads) }, tag: None });
         item = if installed {
             item.action(Action::new("Reinstall Extension", &icons::DOWNLOAD, Act::Ext(ExtAct::Install(Box::new(l.clone())))))
                 .action(Action::new("Uninstall Extension", &icons::TRASH, Act::Ext(ExtAct::Uninstall(l.id()))).destructive())
