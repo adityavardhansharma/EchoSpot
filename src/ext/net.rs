@@ -118,6 +118,65 @@ pub fn favicon(host: &str) -> Option<PathBuf> {
     None
 }
 
+fn base64(text: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(text.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for c in text.bytes().filter(|c| !c.is_ascii_whitespace() && *c != b'=') {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => return None,
+        };
+        acc = (acc << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
+pub fn percent_decode(text: &str) -> Vec<u8> {
+    let bytes = text.as_bytes();
+    let (mut out, mut i) = (Vec::with_capacity(bytes.len()), 0);
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len()
+            && let Ok(v) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+            out.push(v);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    out
+}
+
+/// A `data:` URI's picture as a file in the cache: the inline SVG or PNG an extension draws its
+/// own icons with. Written once per distinct URI.
+pub fn data_uri(uri: &str) -> Option<PathBuf> {
+    let (meta, data) = uri.strip_prefix("data:")?.split_once(',')?;
+    let mime = meta.split(';').next().unwrap_or("");
+    let ext = match mime {
+        "image/svg+xml" => "svg",
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => return None,
+    };
+    let path = dir().join(format!("{}.{ext}", key(uri)));
+    if !path.is_file() {
+        let bytes = if meta.ends_with(";base64") { base64(data)? } else { percent_decode(data) };
+        std::fs::write(&path, bytes).ok()?;
+    }
+    Some(path)
+}
+
 /// GETs a URL and returns its body. Blocking: call from a worker.
 pub fn get(url: &str) -> Option<String> {
     util::output("curl", &["-sL", "--max-time", "20", "-A", "Mozilla/5.0 (X11; Linux x86_64) EchoSpot", url])
