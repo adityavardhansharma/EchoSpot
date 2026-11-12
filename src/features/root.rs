@@ -211,7 +211,7 @@ pub fn build(app: &App, query: &str) -> Built {
         let mut item = Item::new("calc", answer.clone(), IconSrc::Badge(&icons::CALCULATOR, Tint::Orange))
             .action(Action::new("Copy Answer", &icons::COPY, Act::Copy(answer.clone())))
             .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(answer.clone())).keys("ctrl+enter"))
-            .action(Action::new("Copy Plain Number", &icons::HASH, Act::Copy(answer.replace(',', "").split(' ').next().unwrap_or("").to_string())).keys("ctrl+shift+c"));
+            .action(Action::new("Copy Plain Number", &icons::HASH, Act::Copy(calc::plain(&answer))).keys("ctrl+shift+c"));
         item.card = Some(card);
         sections.push("Calculator", vec![item]);
     }
