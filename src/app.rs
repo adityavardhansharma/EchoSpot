@@ -245,8 +245,10 @@ impl App {
 
     /// Back to the launcher with nothing typed, as a fresh summon finds it.
     pub fn reset(&mut self) {
-        for screen in &self.screens {
-            if let Route::Ext(id) = screen.route {
+        let running: Vec<u64> = self.screens.iter().filter_map(|s| if let Route::Ext(id) = s.route { Some(id) } else { None }).collect();
+        for id in running {
+            // A command waiting on a browser sign-in is still wanted when the palette returns.
+            if !self.ext.awaiting_sign_in(id) {
                 self.ext.stop(id);
             }
         }

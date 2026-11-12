@@ -107,9 +107,22 @@ impl Session {
     }
 }
 
+/// A command waiting for its person to finish signing in, in the browser.
+struct SignIn {
+    session: u64,
+    call: u64,
+    state: String,
+    provider: String,
+    since: u64,
+}
+
+/// How long a command is kept alive for a sign-in nobody finishes.
+const SIGN_IN_SECS: u64 = 15 * 60;
+
 pub struct Extensions {
     pub installed: Vec<Installed>,
     pub sessions: Vec<Session>,
+    sign_ins: Vec<SignIn>,
     tx: Sender<(u64, Value)>,
     rx: Receiver<(u64, Value)>,
     waker: Option<Waker>,
@@ -187,7 +200,7 @@ fn read_manifest(dir: &Path) -> Option<Installed> {
 impl Extensions {
     pub fn load() -> Self {
         let (tx, rx) = channel();
-        let mut ext = Self { installed: Vec::new(), sessions: Vec::new(), tx, rx, waker: None, next_id: 1, store: store::Store::default() };
+        let mut ext = Self { installed: Vec::new(), sessions: Vec::new(), sign_ins: Vec::new(), tx, rx, waker: None, next_id: 1, store: store::Store::default() };
         ext.rescan();
         ext
     }
@@ -228,7 +241,19 @@ impl Extensions {
         }
     }
 
+    /// Whether a command is waiting on a browser sign-in, and so should outlive the palette
+    /// hiding behind that browser.
+    pub fn awaiting_sign_in(&mut self, id: u64) -> bool {
+        let now = util::now_secs();
+        let stale: Vec<u64> = self.sign_ins.iter().filter(|s| now.saturating_sub(s.since) > SIGN_IN_SECS).map(|s| s.session).collect();
+        for session in stale {
+            self.stop(session);
+        }
+        self.sign_ins.iter().any(|s| s.session == id)
+    }
+
     pub fn stop(&mut self, id: u64) {
+        self.sign_ins.retain(|s| s.session != id);
         if let Some(at) = self.sessions.iter().position(|s| s.id == id) {
             let mut session = self.sessions.remove(at);
             session.send(json!({ "t": "quit" }));
@@ -810,6 +835,24 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                         });
                         app.dialog_reply = Some((id, call_id));
                     }
+                    "oauth" => {
+                        let o = args.first().cloned().unwrap_or(Value::Null);
+                        let (url, provider) = (text_of(o.get("url")), text_of(o.get("provider")));
+                        if !url.starts_with("https://") {
+                            if let Some(s) = app.ext.session_mut(id) {
+                                s.send(json!({ "t": "reply", "id": call_id, "ok": false, "value": "The sign-in address is not an https link." }));
+                            }
+                            continue;
+                        }
+                        app.ext.sign_ins.retain(|s| s.session != id);
+                        app.ext.sign_ins.push(SignIn { session: id, call: call_id, state: text_of(o.get("state")), provider: provider.clone(), since: util::now_secs() });
+                        app.toast_progress(format!("Waiting for {provider} in your browser…"));
+                        // The browser comes back through a `raycast://` link; make sure it reaches here.
+                        std::thread::spawn(move || {
+                            register_link_handler();
+                            util::open_url(&url);
+                        });
+                    }
                     "openPreferences" => {
                         if let Some(ext) = app.ext.get(&extension).cloned() {
                             forms::open(app, preference_form(&ext, None, None), tx);
@@ -856,6 +899,98 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
         }
     }
     changed
+}
+
+const LINK_HANDLER: &str = "echospot-url.desktop";
+
+/// Makes EchoSpot what opens `raycast://` links, which is how a provider's sign-in page hands
+/// its code back.
+fn register_link_handler() {
+    let Some(apps) = util::data_dir().parent().map(|d| d.join("applications")) else { return };
+    let _ = std::fs::create_dir_all(&apps);
+    let exe = if util::has_program("echospot") { "echospot".to_string() } else {
+        std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_else(|_| "echospot".into())
+    };
+    let entry = format!("[Desktop Entry]\nType=Application\nName=EchoSpot Links\nExec={exe} url %u\nNoDisplay=true\nTerminal=false\nMimeType=x-scheme-handler/raycast;x-scheme-handler/com.raycast;\n");
+    let file = apps.join(LINK_HANDLER);
+    if std::fs::read_to_string(&file).ok().as_deref() != Some(entry.as_str()) {
+        let _ = std::fs::write(&file, entry);
+    }
+    for scheme in ["x-scheme-handler/raycast", "x-scheme-handler/com.raycast"] {
+        if util::output("xdg-mime", &["query", "default", scheme]).as_deref() != Some(LINK_HANDLER) {
+            let _ = util::output("xdg-mime", &["default", LINK_HANDLER, scheme]);
+        }
+    }
+}
+
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let (mut out, mut i) = (Vec::with_capacity(bytes.len()), 0);
+    while i < bytes.len() {
+        let hex = |at: usize| bytes.get(at).and_then(|b| (*b as char).to_digit(16));
+        match (bytes[i], hex(i + 1), hex(i + 2)) {
+            (b'%', Some(hi), Some(lo)) => {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+            }
+            (b'+', ..) => {
+                out.push(b' ');
+                i += 1;
+            }
+            (other, ..) => {
+                out.push(other);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The parameters of a `raycast://oauth?…` (or `com.raycast:/oauth?…`) link.
+fn oauth_link(url: &str) -> Option<HashMap<String, String>> {
+    let rest = url.strip_prefix("raycast://").or_else(|| url.strip_prefix("com.raycast:/"))?;
+    let (path, query) = rest.split_once('?')?;
+    if path.trim_matches('/') != "oauth" {
+        return None;
+    }
+    Some(query.split('&').filter_map(|pair| pair.split_once('=')).map(|(k, v)| (percent_decode(k), percent_decode(v))).collect())
+}
+
+/// A link the system handed EchoSpot: the end of a browser sign-in. True when the palette
+/// should come back up to show the command that was waiting.
+pub fn open_link(app: &mut App, url: &str, tx: &mut Tx) -> bool {
+    let Some(params) = oauth_link(url) else { return false };
+    let state = params.get("state").cloned().unwrap_or_default();
+    // The redirect page drops a state it cannot read; the newest sign-in is then the one meant.
+    let Some(at) = app.ext.sign_ins.iter().position(|s| !state.is_empty() && s.state == state).or(app.ext.sign_ins.len().checked_sub(1)) else { return false };
+    let waiting = app.ext.sign_ins.remove(at);
+    let reply = match (params.get("code"), params.get("error")) {
+        (Some(code), _) if !code.is_empty() => json!({ "t": "reply", "id": waiting.call, "ok": true, "value": { "code": code } }),
+        (_, error) => {
+            let why = params.get("error_description").or(error).cloned().unwrap_or_else(|| "no code came back".into());
+            json!({ "t": "reply", "id": waiting.call, "ok": false, "value": format!("{} sign-in failed: {why}", waiting.provider) })
+        }
+    };
+    let failed = reply["ok"] == json!(false);
+    let Some(session) = app.ext.session_mut(waiting.session) else { return false };
+    session.send(reply);
+    let view = session.view;
+    if failed {
+        app.toast(format!("{} sign-in failed", waiting.provider), Tone::Danger);
+    } else {
+        app.toast(format!("Signed in to {}", waiting.provider), Tone::Success);
+    }
+    if !view {
+        return false;
+    }
+    // The palette hid behind the browser and went back to its root; return to the command.
+    if !app.visible {
+        app.will_show();
+    }
+    if !app.screens.iter().any(|s| s.route == Route::Ext(waiting.session)) {
+        app.push(Route::Ext(waiting.session), tx);
+    }
+    true
 }
 
 /// Answers a `confirmAlert` the extension is waiting on.
@@ -935,5 +1070,20 @@ pub fn filter_changed(app: &mut App, id: u64, index: usize) {
         let mut stored: HashMap<String, String> = util::read_json(&dropdown_store());
         stored.insert(format!("{}:{}", session.extension, session.command), value.clone());
         util::write_json(&dropdown_store(), &stored);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sign_in_links() {
+        let p = oauth_link("raycast://oauth?code=ab%2Bc%20d&package_name=Extension&state=eyJ4IjoxfQ").unwrap();
+        assert_eq!(p["code"], "ab+c d");
+        assert_eq!(p["state"], "eyJ4IjoxfQ");
+        assert_eq!(oauth_link("com.raycast:/oauth?package_name=Extension&error=access_denied").unwrap()["error"], "access_denied");
+        assert!(oauth_link("raycast://extensions/raycast/github/my-issues").is_none());
+        assert!(oauth_link("https://example.com/oauth?code=1").is_none());
     }
 }

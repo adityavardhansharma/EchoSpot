@@ -74,6 +74,17 @@ pub fn serve(handle: AppHandle<App>) {
                 Some("show") => show(&handle, None),
                 Some("open") => show(&handle, words.next().and_then(route)),
                 Some("hide") => hide(&handle),
+                // A `raycast://` link from the browser: the end of an extension's sign-in.
+                Some("url") => {
+                    let url = words.next().unwrap_or("").to_string();
+                    let (tx, rx) = std::sync::mpsc::channel();
+                    handle.update(move |s, t| {
+                        let _ = tx.send(crate::ext::open_link(s, &url, t));
+                    });
+                    if rx.recv_timeout(std::time::Duration::from_secs(2)) == Ok(true) {
+                        handle.open();
+                    }
+                }
                 Some("settings") => crate::settings_ui::open(words.next().unwrap_or("")),
                 Some("quit") => handle.quit(),
                 _ => {}

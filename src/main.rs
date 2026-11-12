@@ -95,6 +95,11 @@ fn main() {
             }
         }
         "ext" => return ext::store::cli(&args[1..]),
+        "url" => {
+            // The system opened a link with EchoSpot; only a running palette has anyone waiting on it.
+            ipc::send(&args.join(" "));
+            return;
+        }
         "calc" => return features::calc::cli(&args[1..].join(" ")),
         "debug-icons" => {
             for app in features::apps::scan() {
