@@ -22,12 +22,15 @@ pub struct Settings {
     /// (works with Hyprland's blur off, Omarchy's default); "compositor" leaves the panel
     /// translucent for Hyprland's own blur; "none" draws it nearly opaque.
     pub backdrop: String,
+    /// The currency a bare amount converts to in the calculator, as a code ("usd"). Empty
+    /// follows the system's time zone and locale.
+    pub currency: String,
     pub ai: crate::features::ai::AiSettings,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), ai: Default::default() }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default() }
     }
 }
 

@@ -29,12 +29,22 @@ fn setup(s: &mut App, waker: Waker) {
     s.icons.attach(ImageCache::new(waker.clone()));
     s.files.configure(waker.clone());
     s.ext.configure(waker.clone());
+    features::calc::set_waker(waker.clone());
+    if !s.settings.currency.is_empty() {
+        features::calc::set_home_currency(&s.settings.currency);
+    }
+    features::calc::warm();
     s.chat.configure(waker);
 }
 
 fn poll(s: &mut App, clock: f64, tx: &mut Tx) -> bool {
     s.clock = clock;
     let mut changed = ext::poll(s, tx);
+    // Fresh exchange rates turn a waiting currency query into an answer.
+    if features::calc::take_dirty() {
+        s.refresh_keeping();
+        changed = true;
+    }
     if s.files.poll() && s.top().route == model::Route::Files {
         s.refresh_keeping();
         changed = true;
@@ -85,6 +95,7 @@ fn main() {
             }
         }
         "ext" => return ext::store::cli(&args[1..]),
+        "calc" => return features::calc::cli(&args[1..].join(" ")),
         "debug-icons" => {
             for app in features::apps::scan() {
                 println!("{:<30} {:<36} {}", app.name, app.icon_name, app.icon.map(|p| p.display().to_string()).unwrap_or_else(|| "MISSING".into()));
@@ -93,7 +104,7 @@ fn main() {
         }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
-            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot quit");
+            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot quit");
         }
         _ => {}
     }
