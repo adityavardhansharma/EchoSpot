@@ -96,6 +96,12 @@ pub enum Act {
     Confirm(Box<Confirm>),
     Ext(crate::ext::ExtAct),
     Ai(AiOp),
+    /// Edit a launcher row's alias and hotkey: its id and title.
+    Binding(String, String),
+    Script(ScriptOp),
+    Note(NoteOp),
+    Calendar(CalOp),
+    Backup(BackupOp),
     /// Open Settings at a pane.
     OpenSettings(String),
     Toast(String),
@@ -119,6 +125,20 @@ pub enum AiOp {
     DeleteChat(u64),
     /// Turn a Quick AI answer into a chat that takes follow-ups.
     Continue,
+    NewAction,
+    EditAction(String),
+    DeleteAction(String),
+    NewPreset,
+    EditPreset(String),
+    DeletePreset(String),
+    /// A new chat under a preset's instructions.
+    UsePreset(String),
+    /// Send a file with the next question.
+    Attach(PathBuf),
+    AttachClipboard,
+    ClearAttachments,
+    ToggleWeb,
+    ToggleTools,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -142,6 +162,36 @@ pub enum SnippetOp {
     New,
     Edit(String),
     Delete(String),
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum BackupOp {
+    Export,
+    Import,
+}
+
+#[derive(Clone, Debug)]
+pub enum CalOp {
+    Add,
+    Refresh,
+    /// Stop reading a calendar, by its address.
+    Remove(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum NoteOp {
+    /// A new note, its title already typed.
+    New(String),
+    Edit(String),
+    Delete(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum ScriptOp {
+    /// Run by id, asking for its arguments first when it takes any.
+    Run(String),
+    RunWith(String, Vec<String>),
+    New,
 }
 
 #[derive(Clone, Debug)]
@@ -174,10 +224,14 @@ pub enum Route {
     Windows,
     Snippets,
     Quicklinks,
+    Notes,
+    Schedule,
     Store,
     Extensions,
     Themes,
     Ai,
+    /// A page of Markdown: `App::page`.
+    Page,
     /// A form: its fields live in `App::form`.
     Form,
     /// A running extension command; the session owns the tree.
