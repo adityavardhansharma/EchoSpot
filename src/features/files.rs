@@ -61,6 +61,33 @@ fn run_lines(program: &str, args: &[&str]) -> Vec<PathBuf> {
     util::output(program, args).map(|out| out.lines().filter(|l| !l.is_empty()).map(PathBuf::from).collect()).unwrap_or_default()
 }
 
+/// Where the system keeps itself: a mount here is not a drive of someone's files.
+const SYSTEM: &[&str] = &["/boot", "/efi", "/var", "/usr", "/etc", "/nix", "/snap", "/proc", "/sys", "/dev", "/tmp", "/run", "/opt", "/srv", "/root", "/lost+found"];
+
+/// The mounted drives in a `/proc/self/mountinfo` listing: real filesystems outside the system's
+/// own folders and outside `home`, which is searched anyway. A drive inside another is left to it.
+fn drives(mountinfo: &str, home: &Path) -> Vec<PathBuf> {
+    const PSEUDO: &[&str] = &["tmpfs", "devtmpfs", "proc", "sysfs", "overlay", "squashfs", "ramfs", "autofs", "efivarfs", "fuse.portal", "fuse.gvfsd-fuse"];
+    let mut out: Vec<PathBuf> = Vec::new();
+    for line in mountinfo.lines() {
+        let Some((before, after)) = line.split_once(" - ") else { continue };
+        let (Some(point), Some(kind)) = (before.split(' ').nth(4), after.split(' ').next()) else { continue };
+        // The kernel writes a space in a path as \040.
+        let point = PathBuf::from(point.replace("\\040", " ").replace("\\011", "\t"));
+        let removable = point.starts_with("/run/media");
+        if PSEUDO.contains(&kind) || point == Path::new("/") || home.starts_with(&point) || point.starts_with(home)
+            || (!removable && SYSTEM.iter().any(|s| point.starts_with(s))) {
+            continue;
+        }
+        if !out.contains(&point) {
+            out.push(point);
+        }
+    }
+    let all = out.clone();
+    out.retain(|p| !all.iter().any(|other| other != p && p.starts_with(other)));
+    out
+}
+
 fn search(query: &str) -> Vec<PathBuf> {
     let home = util::home().display().to_string();
     let mut hits = if util::has_program("fd") {
@@ -196,4 +223,27 @@ pub fn build(app: &App, query: &str) -> Built {
     sections.push("Files", app.files.hits.iter().take(80).map(|p| item(p)).collect());
     Built::list(sections, "Search files by name...").layout(Layout::Split).loading(app.files.pending())
         .empty(if app.files.pending() { "Searching…" } else { "No Results" }, "")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mounted_drives_are_searched() {
+        let info = "\
+29 1 0:27 /@ / rw,relatime shared:1 - btrfs /dev/mapper/root rw
+30 29 0:27 /@home /home rw,relatime shared:2 - btrfs /dev/mapper/root rw
+31 29 0:27 /@log /var/log rw,relatime shared:3 - btrfs /dev/mapper/root rw
+32 29 259:8 / /boot rw,relatime shared:4 - vfat /dev/nvme0n1p8 rw
+33 29 0:40 / /media/data106 rw,relatime shared:5 - btrfs /dev/mapper/data106 rw
+34 33 0:41 / /media/data106/inner rw,relatime shared:6 - ext4 /dev/sdb1 rw
+35 29 0:22 / /run rw,nosuid shared:7 - tmpfs tmpfs rw
+36 35 8:17 / /run/media/me/USB\\040Stick rw,relatime shared:8 - exfat /dev/sdc1 rw
+37 29 8:33 / /home/me/Music rw,relatime shared:9 - ext4 /dev/sdd1 rw
+38 29 0:50 / /mnt/nas rw,relatime shared:10 - nfs4 nas:/share rw";
+        assert_eq!(drives(info, Path::new("/home/me")), vec![
+            PathBuf::from("/media/data106"), PathBuf::from("/run/media/me/USB Stick"), PathBuf::from("/mnt/nas"),
+        ]);
+    }
 }
