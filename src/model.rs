@@ -93,6 +93,7 @@ pub enum Act {
     Hide(String),
     Emoji(String, EmojiOp),
     Snippet(SnippetOp),
+    File(FileOp),
     Quicklink(QuicklinkOp),
     Confirm(Box<Confirm>),
     Ext(crate::ext::ExtAct),
@@ -156,6 +157,12 @@ pub enum EmojiOp {
     Paste,
     Copy,
     Pin,
+}
+
+#[derive(Clone, Debug)]
+pub enum FileOp {
+    /// Leave a folder, and everything in it, out of Search Files from now on.
+    Exclude(PathBuf),
 }
 
 #[derive(Clone, Debug)]

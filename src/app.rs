@@ -719,6 +719,7 @@ impl App {
             }
             Act::Emoji(emoji, op) => features::emoji::perform(self, &emoji, op, tx),
             Act::Snippet(op) => features::snippets::perform(self, op, tx),
+            Act::File(op) => features::files::perform(self, op, tx),
             Act::Snap(op) => features::snap::perform(self, op, tx),
             Act::Quicklink(op) => features::quicklinks::perform(self, op, tx),
             Act::Confirm(confirm) => {

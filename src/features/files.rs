@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use rune::Latest;
 
-use crate::app::{App, Built};
+use crate::app::{App, Built, Tone};
 use crate::icons;
 use crate::model::*;
 use crate::theme::Tint;
@@ -236,6 +236,8 @@ fn item(path: &Path) -> Item {
         }
     }
     let dir = path.parent().unwrap_or(path).to_path_buf();
+    // A folder is excluded itself; a file, the folder it is in.
+    let folder = if kind == "Folder" { path.to_path_buf() } else { dir.clone() };
     Item::new(format!("file:{}", path.display()), name, icon)
         .subtitle(util::tilde(&dir))
         .action(Action::new("Open", &icons::ARROW_UP_RIGHT, Act::OpenPath(path.to_path_buf())))
@@ -246,11 +248,32 @@ fn item(path: &Path) -> Item {
         .action(Action::new("Open Terminal Here", &icons::TERMINAL, Act::Spawn(vec![
             "sh".into(), "-c".into(), format!("cd {} && exec xdg-terminal-exec", util::quote(&dir.display().to_string())),
         ])).keys("ctrl+t").section(""))
+        .action(Action::new("Exclude Folder from Search", &icons::EYE, Act::File(FileOp::Exclude(folder))).keys("ctrl+shift+x"))
         .action(Action::new("Move to Trash", &icons::TRASH, Act::Confirm(Box::new(Confirm {
             title: "Move to Trash?".into(), message: util::tilde(path), icon: &icons::TRASH, confirm: "Move to Trash".into(), destructive: true,
             act: Act::ShellQuiet { cmd: format!("gio trash {}", util::quote(&path.display().to_string())), done: "Moved to Trash".into() },
         }))).keys("ctrl+x").destructive())
         .detail(detail)
+}
+
+pub fn perform(app: &mut App, op: FileOp, _tx: &mut rune::Tx) {
+    match op {
+        FileOp::Exclude(folder) => {
+            let home = util::home();
+            if folder == home || folder == Path::new("/") {
+                return app.toast("That folder holds everything searched", Tone::Danger);
+            }
+            let excluded = &mut app.settings.files.excluded;
+            if !excluded.iter().any(|f| typed_folder(f, &home).as_ref() == Some(&folder)) {
+                excluded.push(util::tilde(&folder));
+                app.settings.save();
+            }
+            let name = folder.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+            app.toast(format!("{} Excluded from Search", util::truncate(&name, 28)), Tone::Success);
+            // The results on screen were found before the folder was excluded.
+            app.refresh();
+        }
+    }
 }
 
 fn recent() -> Vec<PathBuf> {
