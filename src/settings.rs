@@ -9,7 +9,7 @@ use crate::util;
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
-    /// "system", "dark" or "light".
+    /// "system", "dark", "light" or "liquid": Liquid Glass, written in the system's ink.
     pub appearance: String,
     /// Hide the palette when it loses focus.
     pub hide_on_blur: bool,
@@ -30,11 +30,13 @@ pub struct Settings {
     pub snippet_expansion: bool,
     /// Calendars to read for My Schedule: iCal addresses or `.ics` files.
     pub calendars: Vec<String>,
+    /// The Liquid theme's glass.
+    pub liquid: crate::glass::Level,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false, liquid: Default::default() }
     }
 }
 
@@ -58,10 +60,14 @@ impl Settings {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
     }
+    /// The panel is a pane of Liquid Glass rather than one of the Surface setting's materials.
+    pub fn liquid(&self) -> bool {
+        self.appearance == "liquid"
+    }
     pub fn dark(&self, system_dark: bool) -> bool {
         match self.appearance.as_str() {
             "light" => false,
-            "system" => system_dark,
+            "system" | "liquid" => system_dark,
             _ => true,
         }
     }
