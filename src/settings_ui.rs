@@ -509,6 +509,13 @@ pub fn setup(ui: &mut SettingsUi, waker: rune::Waker) {
     ui.icons.attach(rune::ImageCache::new(waker));
 }
 
+/// A recording ends with the window's focus: the keys are no longer its to hear.
+pub fn on_focus(ui: &mut SettingsUi, focused: bool, _: &mut Tx) {
+    if !focused {
+        ui.stop_recording();
+    }
+}
+
 /// Opens Settings at a pane ("ai", "extensions", …).
 pub fn open(pane: &str) {
     let Some((handle, window)) = WINDOW.get() else { return };
@@ -1251,7 +1258,7 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
             .child(text(info.title).font(PANE_TITLE).color(p.text)))
         .child(tool_button(&p, "open-config", &icons::CODE)
             .on_press(|_: &mut SettingsUi| { crate::util::spawn_detached(&["xdg-open".into(), Settings::path().display().to_string()]); }))
-        .child(tool_button(&p, "done", &icons::X).on_press_tx(|_: &mut SettingsUi, tx| tx.close_window()));
+        .child(tool_button(&p, "done", &icons::X).on_press_tx(close));
     let left = SIDEBAR_GAP + SIDEBAR_W;
     let detail = col().key("detail").pin(Some(left), FULL, FULL, FULL).child(toolbar);
     let detail = if ui.pane == Pane::Commands { detail.child(commands(ui, &p, scale)) } else { detail
@@ -1263,12 +1270,37 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
     el().w_full().h_full().child(panel)
 }
 
-pub fn on_key(ui: &mut SettingsUi, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
+fn close(ui: &mut SettingsUi, tx: &mut Tx) {
+    ui.stop_recording();
+    ui.end_alias(false);
+    tx.close_window();
+}
+
+pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    // A hotkey being recorded takes every key, the window's own shortcuts included.
+    if ui.recording.is_some() {
+        ui.record_key(ev, tx.key_base());
+        return true;
+    }
+    let table = ui.pane == Pane::Commands && !ui.alias_editing();
     match ev.key {
-        rune::Key::Escape | rune::Key::Command('w') => tx.close_window(),
-        rune::Key::Down if !ui.editing() => ui.step_pane(1),
-        rune::Key::Up if !ui.editing() => ui.step_pane(-1),
-        rune::Key::Command(c @ '1'..='6') => ui.show(PANES[c as usize - '1' as usize].pane),
+        Key::Modifier { .. } => return false,
+        Key::Escape if ui.alias_editing() => {
+            ui.end_alias(true);
+            tx.blur();
+        }
+        Key::Escape if table && !ui.filter.text.is_empty() => {
+            ui.filter.replace_text("");
+            ui.refilter();
+        }
+        Key::Escape | Key::Command('w') => close(ui, tx),
+        Key::Down if table => ui.step_row(1, tx),
+        Key::Up if table => ui.step_row(-1, tx),
+        Key::Enter if table && !ui.filter.focused => ui.record_selected(tx),
+        Key::Command('f') if table => ui.filter.focused = true,
+        Key::Down if !ui.editing() => ui.step_pane(1),
+        Key::Up if !ui.editing() => ui.step_pane(-1),
+        Key::Command(c @ '1'..='7') => ui.show(PANES[c as usize - '1' as usize].pane),
         _ => return false,
     }
     true

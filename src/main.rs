@@ -183,7 +183,7 @@ fn main() {
         ..AppSpec::new(settings_ui::TITLE, settings_ui::SIZE, settings_ui::SettingsUi::new, settings_ui::view)
     };
     let hidden = WindowOptions { transparent: true, borderless: true, resizable: false, visible: false, min_size: Some((0.0, 0.0)), ..Default::default() };
-    let (settings_handle, settings_window) = app.window(rune::WindowSpec::new("settings", settings_spec).options(hidden));
+    let (settings_handle, settings_window) = app.window(rune::WindowSpec::new("settings", settings_spec).options(hidden).modifier_keys().on_focus(settings_ui::on_focus));
     settings_ui::attach(settings_handle, settings_window, handle.clone());
     if !headless {
         let hud = app.overlay(OverlaySpec {
