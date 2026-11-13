@@ -7,10 +7,12 @@
 
 use std::sync::OnceLock;
 
-use rune::{AppHandle, Color, Cx, El, ScrollFade, ScrollSpec, TextEdit, TextStyle, Tx, WindowHandle, col, el, icon, row, spacer, text, text_input};
+use rune::{AppHandle, Color, Cx, El, Key, KeyEvent, Mods, ScrollFade, ScrollSpec, TextEdit, TextStyle, Tx, WindowHandle, col, el, icon, row, spacer, text, text_input};
 
 use crate::app::App;
 use crate::features::ai;
+use crate::features::bindings::{self, Bindings};
+use crate::features::root::Command;
 use crate::icons;
 use crate::settings::Settings;
 use crate::theme::{self, Palette, Tint, motion, radius, size, space, type_};
@@ -32,6 +34,10 @@ const TOOL_BUTTON: f32 = 30.0;
 const INSET: f32 = 14.0;
 const CARD_R: f32 = 14.0;
 const CONTROL_H: f32 = 26.0;
+/// The Commands table: a row's height, and the widths of its alias and hotkey columns.
+const COMMAND_ROW_H: f32 = 44.0;
+const ALIAS_W: f32 = 108.0;
+const HOTKEY_W: f32 = 168.0;
 
 const PANE_TITLE: TextStyle = TextStyle::new(15.0, 650.0).lh(20.0);
 const GROUP_TITLE: TextStyle = TextStyle::new(13.0, 600.0).lh(18.0);
@@ -41,6 +47,7 @@ const CONTROL: TextStyle = TextStyle::new(12.0, 500.0).lh(16.0);
 #[derive(Clone, Copy, PartialEq)]
 pub enum Pane {
     General,
+    Commands,
     Ai,
     Clipboard,
     Extensions,
@@ -100,6 +107,29 @@ pub struct SettingsUi {
     /// The screen behind the panel, captured as the window opens.
     backdrop: rune::Pixels,
     has_backdrop: bool,
+    /// Every launcher row as the palette last listed them, and the ones the search leaves.
+    commands: Vec<Command>,
+    shown: Vec<usize>,
+    /// The aliases and hotkeys on file. Settings writes them; the palette is handed each change.
+    bindings: Bindings,
+    pub filter: TextEdit,
+    assigned_only: bool,
+    selected: Option<String>,
+    /// A row to select and scroll to once the palette's list arrives.
+    reveal: Option<String>,
+    /// The alias being typed, whose row it is, and what it was before, for Escape.
+    pub alias: TextEdit,
+    alias_for: Option<String>,
+    alias_before: String,
+    /// The row whose hotkey is being recorded, the modifiers held so far, and why the last
+    /// chord pressed was not taken.
+    recording: Option<String>,
+    held: Mods,
+    record_error: String,
+}
+
+fn row_key(id: &str) -> String {
+    format!("command-{id}")
 }
 
 fn dir_size(dir: &std::path::Path) -> u64 {
@@ -115,6 +145,9 @@ impl SettingsUi {
             pane: Pane::General, settings: Settings::load(), model: TextEdit::new(""), base_url: TextEdit::new(""),
             api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0,
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false,
+            commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
+            selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
+            recording: None, held: Mods::default(), record_error: String::new(),
         };
         ui.reload();
         ui
@@ -154,7 +187,7 @@ impl SettingsUi {
     }
 
     fn editing(&self) -> bool {
-        self.model.focused || self.base_url.focused || self.api_key.focused || self.system_prompt.focused
+        self.model.focused || self.base_url.focused || self.api_key.focused || self.system_prompt.focused || self.filter.focused || self.alias.focused
     }
 
     fn step_pane(&mut self, delta: i32) {
@@ -858,6 +891,7 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
     let info = PANES.iter().find(|i| i.pane == ui.pane).unwrap_or(&PANES[0]);
     let sections = match ui.pane {
         Pane::General => general(ui, &p),
+        Pane::Commands => Vec::new(),
         Pane::Ai => ai_pane(ui, &p),
         Pane::Clipboard => clipboard(ui, &p),
         Pane::Extensions => extensions(ui, &p, scale),
