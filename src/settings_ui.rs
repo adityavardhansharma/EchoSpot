@@ -53,6 +53,7 @@ pub enum Pane {
     Commands,
     Ai,
     Clipboard,
+    Files,
     Extensions,
     Shortcuts,
     About,
@@ -65,11 +66,12 @@ struct PaneInfo {
     tint: Tint,
 }
 
-const PANES: [PaneInfo; 7] = [
+const PANES: [PaneInfo; 8] = [
     PaneInfo { pane: Pane::General, title: "General", glyph: &icons::GEAR, tint: Tint::Graphite },
     PaneInfo { pane: Pane::Commands, title: "Commands", glyph: &icons::BOLT, tint: Tint::Pink },
     PaneInfo { pane: Pane::Ai, title: "AI", glyph: &icons::AI, tint: Tint::Violet },
     PaneInfo { pane: Pane::Clipboard, title: "Clipboard", glyph: &icons::CLIPBOARD, tint: Tint::Orange },
+    PaneInfo { pane: Pane::Files, title: "File Search", glyph: &icons::FILE_SEARCH, tint: Tint::Blue },
     PaneInfo { pane: Pane::Extensions, title: "Extensions", glyph: &icons::PUZZLE, tint: Tint::Green },
     PaneInfo { pane: Pane::Shortcuts, title: "Shortcuts", glyph: &icons::KEYBOARD, tint: Tint::Blue },
     PaneInfo { pane: Pane::About, title: "About", glyph: &icons::LOGO, tint: Tint::Indigo },
@@ -550,6 +552,7 @@ pub fn open(pane: &str) {
         "commands" => Some(Pane::Commands),
         "ai" => Some(Pane::Ai),
         "clipboard" => Some(Pane::Clipboard),
+        "files" => Some(Pane::Files),
         "extensions" => Some(Pane::Extensions),
         "shortcuts" => Some(Pane::Shortcuts),
         "about" => Some(Pane::About),
@@ -1163,6 +1166,16 @@ fn clipboard(ui: &SettingsUi, p: &Palette) -> Vec<El> {
     ]
 }
 
+/// Where Search Files looks: the home folder, always.
+fn files(_ui: &SettingsUi, p: &Palette) -> Vec<El> {
+    let home = crate::util::home();
+    vec![
+        noted(p, "Search In", card(p, vec![
+            setting(p, "Home Folder", &home.display().to_string(), text("Always").font(CONTROL).color(p.text_tertiary)),
+        ]), "Search “files” in the launcher, or bind `echospot open files` to a key."),
+    ]
+}
+
 fn extensions(ui: &SettingsUi, p: &Palette, scale: f32) -> Vec<El> {
     let store = card_surface(p).key("store-card").child(row().w_full().px(INSET).py(space::XL).gap(space::XL).center_y()
         .child(ui::badge_tile(&icons::STORE, 36.0, Tint::Cyan))
@@ -1286,6 +1299,7 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
         Pane::Commands => Vec::new(),
         Pane::Ai => ai_pane(ui, &p),
         Pane::Clipboard => clipboard(ui, &p),
+        Pane::Files => files(ui, &p),
         Pane::Extensions => extensions(ui, &p, scale),
         Pane::Shortcuts => shortcuts(&p),
         Pane::About => about(&p),
@@ -1341,7 +1355,7 @@ pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Command('f') if table => ui.filter.focused = true,
         Key::Down if !ui.editing() => ui.step_pane(1),
         Key::Up if !ui.editing() => ui.step_pane(-1),
-        Key::Command(c @ '1'..='7') => ui.show(PANES[c as usize - '1' as usize].pane),
+        Key::Command(c @ '1'..='8') => ui.show(PANES[c as usize - '1' as usize].pane),
         _ => return false,
     }
     true
