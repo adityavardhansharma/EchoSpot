@@ -47,6 +47,16 @@ Status key: `[ ]` not started · `[~]` in progress (say who/what is left) · `[x
 - [x] Tile Window (stop floating), Move Window to Previous Display
 - [x] Reasonable Size (60% × 70%, centred)
 
+- [x] Snap Layouts (`src/features/snap.rs`): "Snap Layouts" (`cmd:snap`, `echospot open snap`) and
+      one command per layout (`snap:halves`, `snap:two-thirds`, `snap:thirds`, `snap:quarters`,
+      `snap:side-stack`, `snap:center`) open a picker: the staged layout drawn as the screen, a
+      rail of layouts under it, the workspace's windows queued beside it. A click, a digit, or
+      the arrows and Return place the window being placed and move on to the next; Tab or a
+      queue row picks another window; "Arrange All" (Ctrl+Return) arranges every window.
+      Verified: zone and arrow logic (unit tests); the picker, single-layout view and action menu
+      in headless snapshots; `arrange` and `snap` frames on test windows. Not verified: a click or
+      Return in the real palette, and the palette staying up and on top between two placements.
+
 Verified: every new command run against a test window, frames checked. Not verified: Previous
 Display (one monitor). Not built: custom sizes and saved window layouts ("Rooms").
 
