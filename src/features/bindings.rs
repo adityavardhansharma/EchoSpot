@@ -138,6 +138,12 @@ impl Bindings {
         self.save();
     }
 
+    /// The other row that already has this chord, however its modifiers were ordered.
+    pub fn holder(&self, chord: &str, except: &str) -> Option<&str> {
+        let wanted = hypr_chord(chord)?;
+        self.hotkeys.iter().find(|(id, c)| id.as_str() != except && hypr_chord(c).as_ref() == Some(&wanted)).map(|(id, _)| id.as_str())
+    }
+
     /// Registers every hotkey with Hyprland, off the UI thread. Safe to repeat: each chord is
     /// unbound before it is bound, so a config reload that dropped them is repaired by the next call.
     pub fn apply(&mut self) {
@@ -239,5 +245,13 @@ mod tests {
         assert_eq!(hypr_chord("alt+space").as_deref(), Some("ALT + SPACE"));
         // A plain key records, and is then refused as a hotkey.
         assert_eq!(hypr_chord(&chord_of(&ev(Key::Text("c".into()), false, false, false, false), Some('c')).unwrap()), None);
+    }
+
+    #[test]
+    fn holders() {
+        let mut b = Bindings::default();
+        b.hotkeys.insert("app:a".into(), "alt+super+c".into());
+        assert_eq!(b.holder("super+alt+c", "app:b"), Some("app:a"));
+        assert_eq!(b.holder("super+alt+c", "app:a"), None);
     }
 }
