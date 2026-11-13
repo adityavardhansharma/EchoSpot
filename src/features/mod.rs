@@ -18,6 +18,7 @@ pub mod notes;
 pub mod quicklinks;
 pub mod root;
 pub mod scripts;
+pub mod snap;
 pub mod snippets;
 pub mod system;
 pub mod windows;

@@ -85,6 +85,7 @@ pub enum Act {
     Close,
     System(crate::features::system::SystemAction),
     Window(crate::features::windows::WindowOp),
+    Snap(crate::features::snap::SnapOp),
     FocusWindow(String),
     CloseWindow(String),
     Clip(ClipOp, u64),
@@ -222,6 +223,8 @@ pub enum Route {
     Emoji,
     Files,
     Windows,
+    /// The snap layout picker: every layout, or the one a layout's own command names.
+    Snap(Option<usize>),
     Snippets,
     Quicklinks,
     Notes,

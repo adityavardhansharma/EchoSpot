@@ -111,6 +111,7 @@ pub struct App {
     pub scripts: Vec<features::scripts::Script>,
     pub page: Option<Page>,
     pub notes: Vec<features::notes::Note>,
+    pub snap: features::snap::Snap,
     pub schedule: features::calendar::Schedule,
     pub ext: Extensions,
     pub chat: features::ai::Chat,
@@ -161,6 +162,7 @@ impl App {
             scripts: features::scripts::load(),
             page: None,
             notes: Vec::new(),
+            snap: Default::default(),
             schedule: Default::default(),
             ext: Extensions::load(),
             chat: features::ai::Chat::default(),
@@ -208,6 +210,7 @@ impl App {
             Route::Emoji => features::emoji::build(self, &query, filter),
             Route::Files => features::files::build(self, &query),
             Route::Windows => features::root::windows(self, &query),
+            Route::Snap(only) => features::snap::build(self, only, &query),
             Route::Snippets => features::snippets::build(self, &query),
             Route::Quicklinks => features::quicklinks::build(self, &query),
             Route::Notes => features::notes::build(self, &query),
@@ -250,6 +253,9 @@ impl App {
     pub fn push(&mut self, route: Route, tx: &mut Tx) {
         self.menu = None;
         self.screens.push(Screen::new(route));
+        if matches!(self.top().route, Route::Snap(_)) {
+            self.snap = features::snap::Snap::load(self.prev_window.as_ref());
+        }
         if self.top().route == Route::Clipboard {
             self.clipboard.reload();
         }
@@ -655,7 +661,7 @@ impl App {
                 self.copy_then_paste(tx);
             }
             Act::Push(route) => {
-                if let Some(id) = features::root::command_id(&route) {
+                if let Some(id) = features::root::command_id(&route).or(features::snap::command_id(&route)) {
                     self.usage.record(id);
                 }
                 self.push(route, tx);
@@ -712,6 +718,7 @@ impl App {
             }
             Act::Emoji(emoji, op) => features::emoji::perform(self, &emoji, op, tx),
             Act::Snippet(op) => features::snippets::perform(self, op, tx),
+            Act::Snap(op) => features::snap::perform(self, op, tx),
             Act::Quicklink(op) => features::quicklinks::perform(self, op, tx),
             Act::Confirm(confirm) => {
                 self.menu = None;
@@ -851,6 +858,10 @@ impl App {
         }
         if self.form.is_some() {
             return features::forms::key(self, ev, tx);
+        }
+        if let Route::Snap(only) = self.top().route
+            && features::snap::key(self, only, ev, tx) {
+            return true;
         }
         let layout = self.top().layout;
         let empty_query = self.top().query.text.is_empty();

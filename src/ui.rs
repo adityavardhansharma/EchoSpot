@@ -648,6 +648,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (None, Layout::List) => match &screen.route {
             Route::Ext(id) => crate::ext::view::body(s, &p, scale, *id).unwrap_or_else(|| list_body(s, &p, scale, screen)),
             Route::Ai if !s.chat.messages.is_empty() => crate::features::ai::body(s, &p),
+            Route::Snap(only) if !screen.items.is_empty() => crate::features::snap::body(s, &p, scale, *only),
             Route::Page if s.page.is_some() => page_body(&p, s.page.as_ref().map(|page| page.markdown.as_str()).unwrap_or("")),
             _ => list_body(s, &p, scale, screen),
         },
