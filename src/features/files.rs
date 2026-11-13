@@ -228,7 +228,7 @@ pub fn build(app: &App, query: &str) -> Built {
     if q.is_empty() {
         sections.push("Recent", recent().iter().map(|p| item(p)).collect());
         return Built::list(sections, "Search files by name...").layout(Layout::Split)
-            .empty("Search Files", "Type a name to search your home folder.");
+            .empty("Search Files", "Type a name to search your home folder and every mounted drive.");
     }
     sections.push("Files", app.files.hits.iter().take(80).map(|p| item(p)).collect());
     Built::list(sections, "Search files by name...").layout(Layout::Split).loading(app.files.pending())
