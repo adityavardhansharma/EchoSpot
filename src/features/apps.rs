@@ -180,18 +180,67 @@ impl AppEntry {
     }
 }
 
-pub fn launch(app: &AppEntry) {
+/// `~/x` as a path under home; anything else as written.
+fn expand_home(path: &str) -> String {
+    match path.strip_prefix("~/") {
+        Some(rest) => crate::util::home().join(rest).display().to_string(),
+        None => path.to_string(),
+    }
+}
+
+/// Whether `uwsm app` would read this program as a desktop entry rather than run it: it takes
+/// any first argument ending in `.desktop` (or `.desktop:action`) for an entry id or file.
+fn reads_as_entry(program: &str) -> bool {
+    program.ends_with(".desktop") || program.rsplit_once(':').is_some_and(|(head, _)| head.ends_with(".desktop"))
+}
+
+/// Starts the app. `Err` says why it could not be started.
+pub fn launch(app: &AppEntry) -> Result<(), String> {
     let mut argv = exec_argv(&app.exec);
     if argv.is_empty() {
-        return;
+        return Err(format!("{} has no command to run", app.name));
     }
-    if app.terminal {
-        let term = std::env::var("TERMINAL").unwrap_or_else(|_| "xdg-terminal-exec".into());
-        argv.splice(0..0, [term, "-e".to_string()]);
+    // Not in the spec, but hand-written entries use it and a shell would have expanded it.
+    argv[0] = expand_home(&argv[0]);
+    let found = if argv[0].contains('/') { std::path::Path::new(&argv[0]).is_file() } else { crate::util::has_program(&argv[0]) };
+    if !found {
+        return Err(format!("{} is missing: {}", app.name, crate::util::tilde(std::path::Path::new(&argv[0]))));
     }
+    let dir = expand_home(&app.dir);
+    let dir = Some(std::path::Path::new(&dir)).filter(|d| !app.dir.is_empty() && d.is_dir());
     // uwsm keeps launched apps in their own systemd scope where Omarchy provides it.
-    if crate::util::has_program("uwsm-app") {
-        argv.splice(0..0, ["uwsm-app".to_string(), "--".to_string()]);
+    let uwsm = crate::util::has_program("uwsm-app");
+    if uwsm && reads_as_entry(&argv[0]) {
+        // A binary named like an entry (OpenCode's is `ai.opencode.desktop`) has to go by its
+        // entry file, which uwsm then reads for the command, terminal and directory itself.
+        argv = vec!["uwsm-app".to_string(), "--".to_string(), app.path.display().to_string()];
+    } else {
+        if app.terminal {
+            let term = std::env::var("TERMINAL").unwrap_or_else(|_| "xdg-terminal-exec".into());
+            argv.splice(0..0, [term, "-e".to_string()]);
+        }
+        if uwsm {
+            argv.splice(0..0, ["uwsm-app".to_string(), "--".to_string()]);
+        }
     }
-    crate::util::spawn_detached(&argv);
+    if crate::util::spawn_detached_in(&argv, dir) { Ok(()) } else { Err(format!("Could not start {}", app.name)) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_named_programs() {
+        assert!(reads_as_entry("/home/me/.local/share/opencode-desktop/ai.opencode.desktop"));
+        assert!(reads_as_entry("some.app.desktop:new-window"));
+        assert!(!reads_as_entry("firefox"));
+        assert!(!reads_as_entry("/opt/docker-desktop/bin/docker-desktop"));
+    }
+
+    #[test]
+    fn field_codes_are_dropped() {
+        assert_eq!(exec_argv("/opt/x/ai.opencode.desktop %U"), vec!["/opt/x/ai.opencode.desktop"]);
+        assert_eq!(exec_argv(r#"sh -c "echo 100%% %f""#), vec!["sh", "-c", "echo 100%% %f"]);
+    }
 }
