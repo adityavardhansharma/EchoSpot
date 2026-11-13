@@ -153,6 +153,11 @@ fn entries(app: &App) -> Vec<Entry> {
                 .action(favorite_action(app, &id));
             out.push(Entry { item, keywords: c.keywords.into() });
         }
+        for (mut item, keywords) in crate::features::snap::rows() {
+            let id = item.id.clone();
+            item.actions.push(favorite_action(app, &id));
+            out.push(Entry { item, keywords });
+        }
     }
     for q in &app.quicklinks.list {
         let id = format!("ql:{}", q.id);

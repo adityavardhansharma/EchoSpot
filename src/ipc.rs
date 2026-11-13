@@ -36,6 +36,7 @@ pub fn route(name: &str) -> Option<Route> {
         "emoji" => Route::Emoji,
         "files" => Route::Files,
         "windows" => Route::Windows,
+        "snap" => Route::Snap(None),
         "snippets" => Route::Snippets,
         "quicklinks" => Route::Quicklinks,
         "notes" => Route::Notes,
@@ -59,6 +60,9 @@ fn show(handle: &AppHandle<App>, route: Option<Route>) {
             }
             if s.top().route == Route::Notes {
                 s.notes = crate::features::notes::load();
+            }
+            if matches!(s.top().route, Route::Snap(_)) {
+                s.snap = crate::features::snap::Snap::load(s.prev_window.as_ref());
             }
             s.refresh();
         }

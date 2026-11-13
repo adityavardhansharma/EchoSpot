@@ -129,7 +129,7 @@ fn main() {
         }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
-            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
+            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snap|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
         }
         _ => {}
     }
@@ -172,6 +172,9 @@ fn main() {
         if let Some(route) = open_route.as_deref().and_then(ipc::route) {
             if route == model::Route::Notes {
                 state.notes = features::notes::load();
+            }
+            if matches!(route, model::Route::Snap(_)) {
+                state.snap = features::snap::Snap::load(state.prev_window.as_ref());
             }
             state.screens.push(app::Screen::new(route));
             state.refresh();
