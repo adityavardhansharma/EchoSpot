@@ -573,8 +573,11 @@ impl App {
             Act::None => {}
             Act::Launch(path) => {
                 if let Some(app) = self.apps.iter().find(|a| a.path == path).cloned() {
+                    if let Err(why) = features::apps::launch(&app) {
+                        // Stay up, so the reason is read where the row was picked.
+                        return self.toast(why, Tone::Danger);
+                    }
                     self.usage.record(&format!("app:{}", app.id));
-                    features::apps::launch(&app);
                 }
                 self.hide(tx);
             }
