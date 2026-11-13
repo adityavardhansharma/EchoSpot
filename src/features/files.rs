@@ -141,19 +141,23 @@ fn search(query: &str, settings: &crate::settings::FileSearch) -> Vec<PathBuf> {
     let mounted = std::fs::read_to_string("/proc/self/mountinfo").map(|m| drives(&m, &home)).unwrap_or_default();
     let scope = Scope::new(&home, mounted, settings);
     let mut hits = if util::has_program("fd") {
-        // Smart case, every term somewhere in the path's name, hidden and ignored files left out.
+        // Smart case, every term somewhere in the path's name, ignored files left out, and hidden
+        // ones too unless the settings ask for them.
         let pattern = query.split_whitespace().map(regex_escape).collect::<Vec<_>>().join(".*");
         // One walk per root, so a folder excluded from one drive is not excluded from another.
         scope.roots.iter().flat_map(|root| {
             let (root_text, globs) = (root.display().to_string(), scope.globs(root));
             let mut args = vec!["--max-results", "200", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", "--exclude", ".Trash-*", "--exclude", "lost+found"];
             args.extend(globs.iter().flat_map(|g| ["--exclude", g.as_str()]));
+            if settings.hidden {
+                args.push("--hidden");
+            }
             args.extend([pattern.as_str(), root_text.as_str()]);
             run_lines("fd", &args)
         }).collect()
     } else {
         let places = scope.roots.iter().map(|r| util::quote(&r.display().to_string())).collect::<Vec<_>>().join(" ");
-        let script = format!("find {places} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 400", util::quote(&format!("*{query}*")));
+        let script = format!("find {places} -maxdepth 6 {}-iname {} 2>/dev/null | head -n 400", if settings.hidden { "" } else { "-not -path '*/.*' " }, util::quote(&format!("*{query}*")));
         util::sh_output(&script).map(|o| o.lines().map(PathBuf::from).collect::<Vec<_>>()).unwrap_or_default()
     };
     hits.retain(|hit| scope.admits(hit));
