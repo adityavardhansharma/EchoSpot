@@ -90,6 +90,11 @@ icons! {
     THIRD_RIGHT = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><rect x="15" y="6.9" width="3.6" height="10.2" rx="1.100" fill="currentColor" stroke="none"/>"#;
     TWO_THIRDS_LEFT = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><rect x="5.4" y="6.9" width="8.4" height="10.2" rx="1.100" fill="currentColor" stroke="none"/>"#;
     TWO_THIRDS_RIGHT = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><rect x="10.2" y="6.9" width="8.4" height="10.2" rx="1.100" fill="currentColor" stroke="none"/>"#;
+    SNAP_HALVES = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><path d="M12 4.500v15"/>"#;
+    SNAP_TWO_THIRDS = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><path d="M15 4.500v15"/>"#;
+    SNAP_THIRDS = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><path d="M9 4.500v15M15 4.500v15"/>"#;
+    SNAP_QUARTERS = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><path d="M12 4.500v15M3 12h18"/>"#;
+    SNAP_SIDE_STACK = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><path d="M12 4.500v15M12 12h9"/>"#;
     MAXIMIZE = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><rect x="5.4" y="6.9" width="13.2" height="10.2" rx="1.100" fill="currentColor" stroke="none"/>"#;
     ALMOST_MAXIMIZE = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><rect x="6.9" y="8.2" width="10.2" height="7.6" rx="1.100" fill="currentColor" stroke="none"/>"#;
     CENTER = r#"<rect x="3" y="4.500" width="18" height="15" rx="2.800"/><rect x="8.6" y="8.9" width="6.8" height="6.2" rx="1.100" fill="currentColor" stroke="none"/>"#;
