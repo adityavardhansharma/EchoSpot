@@ -264,6 +264,87 @@ impl SettingsUi {
         }
     }
 
+    // ---- Commands ----
+
+    fn title_of(&self, id: &str) -> String {
+        self.commands.iter().find(|c| c.id == id).map(|c| c.title.clone()).unwrap_or_else(|| id.to_string())
+    }
+
+    /// Hands the palette the aliases and hotkeys as they now stand; `rebind` has it register
+    /// the hotkeys with Hyprland again.
+    fn push_bindings(&self, rebind: bool) {
+        let (aliases, hotkeys) = (self.bindings.aliases.clone(), self.bindings.hotkeys.clone());
+        tell_main(move |app| {
+            app.bindings.aliases = aliases;
+            app.bindings.hotkeys = hotkeys;
+            if rebind {
+                app.bindings.apply();
+            }
+        });
+    }
+
+    fn alias_editing(&self) -> bool {
+        self.alias_for.is_some() && self.alias.focused
+    }
+
+    /// The alias field changed: it is the row's alias from this keystroke on.
+    fn alias_changed(&mut self) {
+        let Some(id) = self.alias_for.clone() else { return };
+        self.bindings.set_alias(&id, &self.alias.text);
+        self.push_bindings(false);
+    }
+
+    /// Leaves the alias field, with what was typed or, for Escape, with what was there before.
+    fn end_alias(&mut self, restore: bool) {
+        let Some(id) = self.alias_for.take() else { return };
+        self.alias.focused = false;
+        if restore && self.bindings.aliases.get(&id).map(String::as_str).unwrap_or("") != self.alias_before {
+            self.bindings.set_alias(&id, &self.alias_before.clone());
+            self.push_bindings(false);
+        }
+    }
+
+    /// Stops listening without a change, and has the palette take its hotkeys back.
+    fn stop_recording(&mut self) {
+        if self.recording.take().is_some() {
+            self.record_error.clear();
+            tell_main(|app| app.bindings.apply());
+        }
+    }
+
+    fn set_hotkey(&mut self, id: &str, chord: &str) {
+        self.bindings.set_hotkey(id, chord);
+        self.recording = None;
+        self.record_error.clear();
+        self.push_bindings(true);
+    }
+
+    /// A key while a hotkey is being recorded. Escape keeps what was there, Backspace removes
+    /// it, and anything else is the hotkey if Hyprland can bind it and no other row has it.
+    fn record_key(&mut self, ev: &KeyEvent, base: Option<char>) {
+        let Some(id) = self.recording.clone() else { return };
+        if let Key::Modifier { .. } = ev.key {
+            self.held = ev.mods;
+            return;
+        }
+        let m = ev.mods;
+        let bare = !(m.logo || m.ctrl || m.cmd || m.alt || m.shift);
+        match ev.key {
+            Key::Escape if bare => self.stop_recording(),
+            Key::Backspace | Key::Delete if bare => self.set_hotkey(&id, ""),
+            _ => {
+                let Some(chord) = bindings::chord_of(ev, base) else { return };
+                if bindings::hypr_chord(&chord).is_none() {
+                    self.record_error = "Add Super, Ctrl or Alt".into();
+                } else if let Some(other) = self.bindings.holder(&chord, &id) {
+                    self.record_error = format!("Used by {}", self.title_of(other));
+                } else {
+                    self.set_hotkey(&id, &chord);
+                }
+            }
+        }
+    }
+
     /// Asks the provider whether the key and endpoint answer, off the UI thread.
     fn test_connection(&mut self) {
         if self.probe == Probe::Running {
