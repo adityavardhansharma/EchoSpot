@@ -192,6 +192,21 @@ fn entries(app: &App) -> Vec<Entry> {
     out
 }
 
+/// A launcher row as Settings lists it: enough to draw it and to bind it.
+#[derive(Clone)]
+pub struct Command {
+    pub id: String,
+    pub title: String,
+    /// "Application", "Command", "Quicklink", or the extension it belongs to.
+    pub kind: String,
+    pub icon: IconSrc,
+}
+
+/// Every launcher row that can carry an alias and a hotkey.
+pub fn catalog(app: &App) -> Vec<Command> {
+    entries(app).into_iter().map(|e| Command { id: e.item.id, title: e.item.title, kind: e.item.trailing, icon: e.item.icon }).collect()
+}
+
 /// What Return does on the launcher row with this id.
 pub fn primary(app: &App, id: &str) -> Option<Act> {
     entries(app).into_iter().find(|e| e.item.id == id).and_then(|e| e.item.actions.into_iter().next()).map(|a| a.act)
