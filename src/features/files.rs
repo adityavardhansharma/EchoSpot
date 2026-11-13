@@ -18,6 +18,8 @@ pub struct FileSearch {
     pub hits: Vec<PathBuf>,
     pub answered: String,
     pub requested: String,
+    /// The settings the last request was made under: a change to them is a new search.
+    scope: crate::settings::FileSearch,
 }
 
 impl FileSearch {
@@ -28,10 +30,13 @@ impl FileSearch {
 
     pub fn request(&mut self, query: &str, settings: &crate::settings::FileSearch) {
         let q = query.trim().to_string();
-        if q == self.requested {
+        if q == self.requested && *settings == self.scope {
             return;
         }
         self.requested = q.clone();
+        self.scope = settings.clone();
+        // What is on screen was found under the old settings.
+        self.answered.clear();
         if q.is_empty() {
             self.results.cancel();
             self.hits.clear();
