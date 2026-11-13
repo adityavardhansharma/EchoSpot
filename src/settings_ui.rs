@@ -275,6 +275,11 @@ pub fn attach(handle: AppHandle<SettingsUi>, window: WindowHandle, main: AppHand
     let _ = MAIN.set(main);
 }
 
+/// Gives Settings what a window is given at start: somewhere to decode icons.
+pub fn setup(ui: &mut SettingsUi, waker: rune::Waker) {
+    ui.icons.attach(rune::ImageCache::new(waker));
+}
+
 /// Opens Settings at a pane ("ai", "extensions", …).
 pub fn open(pane: &str) {
     let Some((handle, window)) = WINDOW.get() else { return };

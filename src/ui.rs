@@ -77,21 +77,22 @@ pub fn markdown_style(p: &Palette) -> rune_kit::markdown::MarkdownStyle {
         .rule(p.separator).quote_rule(p.border).list(18.0, 4.0)
 }
 
-pub fn icon_slot(s: &App, p: &Palette, scale: f32, src: &IconSrc, slot: f32) -> El {
+/// An icon in its square slot. `icons` is the window's own store: the palette's, or Settings'.
+pub fn icon_slot(icons: &crate::store::IconStore, p: &Palette, scale: f32, src: &IconSrc, slot: f32) -> El {
     match src {
         IconSrc::None => el().size(slot, slot),
         IconSrc::Glyph(g) => glyph_tile(p, g, slot, None),
         IconSrc::Tinted(g, c) => glyph_tile(p, g, slot, Some(*c)),
         IconSrc::Badge(g, tint) => badge_tile(g, slot, *tint),
-        IconSrc::Favicon(path) => match s.icons.file(path, slot, scale) {
+        IconSrc::Favicon(path) => match icons.file(path, slot, scale) {
             Some(px) => favicon_tile(&px, slot),
             None => glyph_tile(p, &icons::LINK, slot, None),
         },
-        IconSrc::App(path) => match s.icons.file(path, slot, scale) {
+        IconSrc::App(path) => match icons.file(path, slot, scale) {
             Some(px) => el().size(slot, slot).pixels_fit(&px, SurfaceFit::Fit),
             None => glyph_tile(p, &icons::BOX, slot, None),
         },
-        IconSrc::File(path) => match s.icons.file(path, slot, scale) {
+        IconSrc::File(path) => match icons.file(path, slot, scale) {
             Some(px) => el().size(slot, slot).center()
                 .child(el().size(slot - 2.0, slot - 2.0).radius(radius::THUMBNAIL).fill(p.icon_placeholder).pixels_fit(&px, SurfaceFit::Fill)),
             None => glyph_tile(p, &icons::IMAGE, slot, None),
@@ -131,7 +132,7 @@ fn result_row(s: &App, p: &Palette, scale: f32, item: &Item, index: usize, selec
     r = row_fill(r, p, selected)
         .on_press_tx(move |s: &mut App, tx| s.select(index, tx))
         .on_double_press_tx(|s: &mut App, tx| s.run_primary(tx));
-    let mut slot = icon_slot(s, p, scale, &item.icon, size::RESULT_ROW_ICON);
+    let mut slot = icon_slot(&s.icons, p, scale, &item.icon, size::RESULT_ROW_ICON);
     if item.running {
         slot = slot.child(el().absolute(size::RESULT_ROW_ICON / 2.0 - 1.5, size::RESULT_ROW_ICON + 1.0).size(3.0, 3.0).radius(1.5).fill(p.text_secondary));
     }
@@ -313,7 +314,7 @@ fn grid_body(s: &App, p: &Palette, scale: f32, screen: &Screen, columns: usize) 
                 let face = match &item.icon {
                     IconSrc::Emoji(e) => text(e.clone()).font(TextStyle::new((cell * 0.42).min(34.0), 400.0).lh(cell * 0.56)),
                     other => col().center().gap(space::XS)
-                        .child(icon_slot(s, p, scale, other, (cell * 0.5).round()))
+                        .child(icon_slot(&s.icons, p, scale, other, (cell * 0.5).round()))
                         .child(text(item.title.clone()).font(type_::KEY_CAP).color(p.text_secondary).truncate().max_w(cell - space::MD)),
                 };
                 let mut tile = el().key(format!("row-{}", item.id)).size(cell, cell).radius(radius::EMOJI_CELL).center()

@@ -177,6 +177,7 @@ fn main() {
         state
     });
     let settings_spec = AppSpec::<settings_ui::SettingsUi> {
+        setup: Some(settings_ui::setup),
         on_key: Some(settings_ui::on_key),
         min_size: Some((0.0, 0.0)),
         ..AppSpec::new(settings_ui::TITLE, settings_ui::SIZE, settings_ui::SettingsUi::new, settings_ui::view)
