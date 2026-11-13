@@ -111,6 +111,9 @@ pub struct SettingsUi {
     /// The screen behind the panel, captured as the window opens.
     backdrop: rune::Pixels,
     has_backdrop: bool,
+    /// The same capture, whole, for the Liquid theme's lens.
+    glass: crate::glass::Shot,
+    system_dark: std::cell::Cell<bool>,
     /// Every launcher row as the palette last listed them, and the ones the search leaves.
     commands: Vec<Command>,
     shown: Vec<usize>,
@@ -148,7 +151,7 @@ impl SettingsUi {
         let mut ui = Self {
             pane: Pane::General, settings: Settings::load(), model: TextEdit::new(""), base_url: TextEdit::new(""),
             api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0,
-            probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false,
+            probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
             selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
             recording: None, held: Mods::default(), record_error: String::new(),
@@ -185,16 +188,23 @@ impl SettingsUi {
 
     /// Takes the patch of screen the window is about to cover, as the palette does when summoned.
     fn capture(&mut self) {
+        // Taken whatever the theme is: the live backdrop then feeds whichever is chosen.
         self.has_backdrop = false;
-        if self.settings.backdrop != "capture" {
-            return;
-        }
+        self.glass.clear();
         let shot = crate::backdrop::centered_origin(SIZE.0, SIZE.1)
             .and_then(|(x, y)| crate::backdrop::capture_rect(x + size::WINDOW_MARGIN, y + size::WINDOW_MARGIN, PANEL.0, PANEL.1));
         if let Some((w, h, rgba)) = shot {
-            self.backdrop.set(w, h, rgba);
-            self.has_backdrop = true;
+            self.set_backdrop(w, h, rgba);
         }
+        crate::live::start_settings();
+    }
+
+    /// A picture of the screen behind the panel, for Blur and for Liquid alike.
+    pub fn set_backdrop(&mut self, w: u32, h: u32, rgba: Vec<u8>) {
+        // Both materials are kept: a still screen sends no second picture after a theme change.
+        self.glass.set(w, h, rgba.clone());
+        self.backdrop.set(w, h, rgba);
+        self.has_backdrop = true;
     }
 
     fn editing(&self) -> bool {
@@ -726,6 +736,17 @@ fn mini_system() -> El {
         .child(el().absolute(half, 0.0).size(half, PIC.1).clip_rounded(0.0).child(el().absolute(-half, 0.0).child(mini_palette(false))))
 }
 
+/// Liquid Glass: the desktop showing through a clear pane, lit along its rim.
+fn mini_liquid() -> El {
+    let (inset_x, inset_y) = (9.0, 7.0);
+    let pane = el().absolute(inset_x, inset_y).size(PIC.0 - inset_x * 2.0, PIC.1 - inset_y * 2.0).radius(7.0).clip_rounded(7.0)
+        .child(el().absolute(-inset_x - 3.0, -inset_y - 2.0).child(wallpaper(0.0)))
+        .child(el().pin(FULL, FULL, FULL, FULL).linear_gradient(std::f32::consts::PI, [(0.0, Color::WHITE.alpha(0.22)), (0.45, Color::WHITE.alpha(0.03)), (1.0, Color::WHITE.alpha(0.10))]))
+        .child(mini_rows(true, 3.0))
+        .child(el().pin(FULL, FULL, FULL, FULL).radius(7.0).border_gradient(1.0, Color::WHITE.alpha(0.85), Color::WHITE.alpha(0.25)));
+    el().size(PIC.0, PIC.1).radius(PIC_R).clip_rounded(PIC_R).child(wallpaper(0.0)).child(pane)
+}
+
 /// A desktop to stand behind a surface drawing: a few bright shapes on a dark ground.
 fn wallpaper(blur: f32) -> El {
     let shape = |x: f32, y: f32, d: f32, tint: Tint| el().absolute(x, y).size(d, d).radius(d / 2.0).fill(tint.stops().0);
@@ -757,6 +778,7 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         choice(p, "theme-system".into(), s.appearance == "system", "Auto", mini_system(), |s| s.appearance = "system".into()),
         choice(p, "theme-light".into(), s.appearance == "light", "Light", mini_palette(false), |s| s.appearance = "light".into()),
         choice(p, "theme-dark".into(), s.appearance == "dark", "Dark", mini_palette(true), |s| s.appearance = "dark".into()),
+        choice(p, "theme-liquid".into(), s.liquid(), "Liquid", mini_liquid(), |s| s.appearance = "liquid".into()),
     ];
     let surfaces = vec![
         choice(p, "surface-capture".into(), s.backdrop == "capture", "Blur", mini_surface("capture"), |s| s.backdrop = "capture".into()),
@@ -764,13 +786,14 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         choice(p, "surface-none".into(), s.backdrop == "none", "Solid", mini_surface("none"), |s| s.backdrop = "none".into()),
     ];
     let surface_note = match s.backdrop.as_str() {
+        _ if s.liquid() => "Liquid is its own surface: glass that bends the screen behind it.",
         "capture" => "EchoSpot blurs the screen behind it itself. Works with Hyprland's blur off.",
         "compositor" => "Left translucent for Hyprland's own blur to fill.",
         _ => "An opaque panel: nothing shows through.",
     };
     vec![
         group(p, "Appearance", card(p, vec![
-            pictured(p, "Theme", "Auto follows the system.", themes),
+            pictured(p, "Theme", "Auto follows the system. Liquid is glass.", themes),
             pictured(p, "Surface", surface_note, surfaces),
         ])),
         group(p, "Behavior", card(p, vec![
@@ -1279,11 +1302,12 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
     let detail = col().key("detail").pin(Some(left), FULL, FULL, FULL).child(toolbar);
     let detail = if ui.pane == Pane::Commands { detail.child(commands(ui, &p, scale)) } else { detail
         .child(col().key(format!("settings-scroll-{}", info.title)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_fade(fade).child(content)) };
-    let panel = ui::panel_surface("settings-panel", &p, PANEL, ui.has_backdrop.then_some(&ui.backdrop), &ui.settings.backdrop)
+    ui.system_dark.set(env.system_dark);
+    let liquid = ui.settings.liquid() && ui.glass.ready();
+    let panel = ui::panel_surface("settings-panel", &p, PANEL, (ui.has_backdrop && ui.settings.backdrop == "capture").then_some(&ui.backdrop), &ui.settings.backdrop, liquid)
         .child(detail)
-        .child(sidebar(ui, &p))
-        .child(ui::panel_rim(&p));
-    el().w_full().h_full().child(panel)
+        .child(sidebar(ui, &p));
+    el().w_full().h_full().child(if liquid { panel } else { panel.child(ui::panel_rim(&p)) })
 }
 
 fn close(ui: &mut SettingsUi, tx: &mut Tx) {
@@ -1320,4 +1344,10 @@ pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
         _ => return false,
     }
     true
+}
+
+impl crate::glass::Liquid for SettingsUi {
+    fn pane(&self) -> Option<crate::glass::Pane<'_>> {
+        self.settings.liquid().then(|| crate::glass::Pane { window: SIZE, dark: self.system_dark.get(), level: self.settings.liquid, shot: &self.glass })
+    }
 }
