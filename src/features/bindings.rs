@@ -125,6 +125,19 @@ impl Bindings {
         self.apply();
     }
 
+    /// Sets or, given an empty one, removes a row's alias. An alias is one word.
+    pub fn set_alias(&mut self, id: &str, alias: &str) {
+        let alias: String = alias.split_whitespace().collect();
+        if alias.is_empty() { self.aliases.remove(id); } else { self.aliases.insert(id.to_string(), alias); }
+        self.save();
+    }
+
+    /// Sets or, given an empty one, removes a row's hotkey.
+    pub fn set_hotkey(&mut self, id: &str, chord: &str) {
+        if chord.is_empty() { self.hotkeys.remove(id); } else { self.hotkeys.insert(id.to_string(), chord.to_string()); }
+        self.save();
+    }
+
     /// Registers every hotkey with Hyprland, off the UI thread. Safe to repeat: each chord is
     /// unbound before it is bound, so a config reload that dropped them is repaired by the next call.
     pub fn apply(&mut self) {
