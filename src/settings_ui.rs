@@ -1221,6 +1221,9 @@ fn files(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         noted(p, "Search In", card(p, places), note),
         noted(p, "Excluded Folders", card(p, excluded_rows(ui, p)),
             if ui.exclude_error.is_empty() { "Nothing inside an excluded folder is found, however deep." } else { ui.exclude_error.as_str() }),
+        noted(p, "Results", card(p, vec![
+            setting(p, "Find hidden files", "Files and folders whose names begin with a dot.", switch(p, "files-hidden", s.hidden, |s| s.files.hidden = !s.files.hidden)),
+        ]), "Whatever a .gitignore, .ignore or .fdignore file leaves out is never found: put an .ignore file in a folder to hide parts of it."),
     ]
 }
 
