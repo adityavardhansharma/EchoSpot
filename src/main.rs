@@ -7,9 +7,11 @@ mod app;
 mod backdrop;
 mod ext;
 mod features;
+mod glass;
 mod hud;
 mod icons;
 mod ipc;
+mod live;
 mod model;
 mod settings;
 mod settings_ui;
@@ -147,7 +149,7 @@ fn main() {
         transparent: true, borderless: true, resizable: false, visible: !headless && show_now,
         min_size: Some((0.0, 0.0)), ..Default::default()
     };
-    let mut app = rune::App::new(spec).window_options(options).on_focus(on_focus);
+    let mut app = rune::App::new(spec).window_options(options).on_focus(on_focus).compositor(glass::Glass::default());
     if !headless {
         app = app.keep_running();
         if !show_now {
@@ -183,7 +185,18 @@ fn main() {
         ..AppSpec::new(settings_ui::TITLE, settings_ui::SIZE, settings_ui::SettingsUi::new, settings_ui::view)
     };
     let hidden = WindowOptions { transparent: true, borderless: true, resizable: false, visible: false, min_size: Some((0.0, 0.0)), ..Default::default() };
-    let (settings_handle, settings_window) = app.window(rune::WindowSpec::new("settings", settings_spec).options(hidden).modifier_keys().on_focus(settings_ui::on_focus));
+    let (settings_handle, settings_window) = app.window(rune::WindowSpec::from_app("settings", rune::App::new(settings_spec).compositor(glass::Glass::default())).options(hidden).modifier_keys().on_focus(settings_ui::on_focus));
+    if !headless {
+        // What is behind each window, kept current while it is open.
+        let palette = handle.clone();
+        live::spawn_palette((theme::size::WINDOW_W, theme::size::WINDOW_H), move |w, h, rgba| {
+            palette.update_if(move |s: &mut App, _| s.visible && s.set_backdrop(w, h, rgba));
+        });
+        let settings = settings_handle.clone();
+        live::spawn_settings(settings_ui::SIZE, move |w, h, rgba| {
+            settings.update(move |ui: &mut settings_ui::SettingsUi, _| ui.set_backdrop(w, h, rgba));
+        });
+    }
     settings_ui::attach(settings_handle, settings_window, handle.clone());
     if !headless {
         let hud = app.overlay(OverlaySpec {
