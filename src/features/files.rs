@@ -106,6 +106,11 @@ pub fn typed_folder(text: &str, home: &Path) -> Option<PathBuf> {
     path.is_absolute().then(|| path.components().collect())
 }
 
+/// The drives mounted right now, as the search and Settings both see them.
+pub fn mounted_drives() -> Vec<PathBuf> {
+    std::fs::read_to_string("/proc/self/mountinfo").map(|m| drives(&m, &util::home())).unwrap_or_default()
+}
+
 /// What a search covers: the folders it walks, and the folders inside them it leaves alone.
 #[derive(Debug, PartialEq)]
 struct Scope {
@@ -143,8 +148,7 @@ fn glob_escape(s: &str) -> String {
 
 fn search(query: &str, settings: &crate::settings::FileSearch) -> Vec<PathBuf> {
     let home = util::home();
-    let mounted = std::fs::read_to_string("/proc/self/mountinfo").map(|m| drives(&m, &home)).unwrap_or_default();
-    let scope = Scope::new(&home, mounted, settings);
+    let scope = Scope::new(&home, mounted_drives(), settings);
     let mut hits = if util::has_program("fd") {
         // Smart case, every term somewhere in the path's name, ignored files left out, and hidden
         // ones too unless the settings ask for them.

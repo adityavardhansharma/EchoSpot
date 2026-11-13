@@ -108,6 +108,8 @@ pub struct SettingsUi {
     /// Clipboard entries, how many are images, and bytes on disk.
     clipboard: (usize, usize, u64),
     chats: usize,
+    /// The drives mounted as the window opened.
+    drives: Vec<std::path::PathBuf>,
     probe: Probe,
     icons: crate::store::IconStore,
     /// The screen behind the panel, captured as the window opens.
@@ -152,7 +154,7 @@ impl SettingsUi {
     pub fn new() -> Self {
         let mut ui = Self {
             pane: Pane::General, settings: Settings::load(), model: TextEdit::new(""), base_url: TextEdit::new(""),
-            api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0,
+            api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0, drives: Vec::new(),
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
             selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
@@ -176,6 +178,7 @@ impl SettingsUi {
         let images = entries.iter().filter(|e| e.kind == crate::features::clipboard::Kind::Image).count();
         self.clipboard = (entries.len(), images, dir_size(&crate::util::data_dir().join("clipboard")));
         self.chats = ai::threads().len();
+        self.drives = crate::features::files::mounted_drives();
         self.probe = Probe::Idle;
         self.fetched = Default::default();
         self.check += 1;
@@ -1166,13 +1169,29 @@ fn clipboard(ui: &SettingsUi, p: &Palette) -> Vec<El> {
     ]
 }
 
-/// Where Search Files looks: the home folder, always.
-fn files(_ui: &SettingsUi, p: &Palette) -> Vec<El> {
-    let home = crate::util::home();
+/// Where Search Files looks: the home folder, always, and each mounted drive with its switch.
+fn files(ui: &SettingsUi, p: &Palette) -> Vec<El> {
+    let (s, home) = (&ui.settings.files, crate::util::home());
+    let mut places = vec![
+        setting(p, "Home Folder", &home.display().to_string(), text("Always").font(CONTROL).color(p.text_tertiary)),
+    ];
+    for drive in &ui.drives {
+        let at = drive.display().to_string();
+        let name = drive.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| at.clone());
+        let on = !s.drives_off.contains(&at);
+        let toggled = at.clone();
+        places.push(setting(p, &name, &at, switch(p, &format!("drive-{at}"), on, move |s| {
+            let off = &mut s.files.drives_off;
+            match off.iter().position(|d| *d == toggled) {
+                Some(i) => { off.remove(i); }
+                None => off.push(toggled.clone()),
+            }
+        })));
+    }
+    let note = if ui.drives.is_empty() { "No other drives are mounted. One that is mounted later is searched too, and appears here." }
+        else { "Every mounted drive is searched unless it is switched off here. One mounted later is searched too." };
     vec![
-        noted(p, "Search In", card(p, vec![
-            setting(p, "Home Folder", &home.display().to_string(), text("Always").font(CONTROL).color(p.text_tertiary)),
-        ]), "Search “files” in the launcher, or bind `echospot open files` to a key."),
+        noted(p, "Search In", card(p, places), note),
     ]
 }
 
