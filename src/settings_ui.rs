@@ -1192,7 +1192,28 @@ fn files(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         else { "Every mounted drive is searched unless it is switched off here. One mounted later is searched too." };
     vec![
         noted(p, "Search In", card(p, places), note),
+        noted(p, "Excluded Folders", card(p, excluded_rows(ui, p)), "Nothing inside an excluded folder is found, however deep."),
     ]
+}
+
+/// The folders left out of the search, each with the button that lets it back in.
+fn excluded_rows(ui: &SettingsUi, p: &Palette) -> Vec<El> {
+    let home = crate::util::home();
+    let mut rows: Vec<El> = ui.settings.files.excluded.iter().map(|folder| {
+        let path = crate::features::files::typed_folder(folder, &home).unwrap_or_else(|| folder.into());
+        let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| folder.clone());
+        // A folder that is gone, or on a drive not mounted now, keeps its place and says so.
+        let place = if path.is_dir() { crate::util::tilde(&path) } else { format!("{} · not there now", crate::util::tilde(&path)) };
+        let gone = folder.clone();
+        setting(p, &name, &place, button(p, &format!("include-{folder}"), "Remove", false, move |ui, _| {
+            ui.settings.files.excluded.retain(|f| *f != gone);
+            ui.commit();
+        }))
+    }).collect();
+    if rows.is_empty() {
+        rows.push(setting(p, "Nothing excluded", "Folders you exclude from the search appear here.", el()));
+    }
+    rows
 }
 
 fn extensions(ui: &SettingsUi, p: &Palette, scale: f32) -> Vec<El> {
