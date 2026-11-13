@@ -249,6 +249,7 @@ fn item(path: &Path) -> Item {
             "sh".into(), "-c".into(), format!("cd {} && exec xdg-terminal-exec", util::quote(&dir.display().to_string())),
         ])).keys("ctrl+t").section(""))
         .action(Action::new("Exclude Folder from Search", &icons::EYE, Act::File(FileOp::Exclude(folder))).keys("ctrl+shift+x"))
+        .action(Action::new("File Search Settings…", &icons::GEAR, Act::OpenSettings("files".into())))
         .action(Action::new("Move to Trash", &icons::TRASH, Act::Confirm(Box::new(Confirm {
             title: "Move to Trash?".into(), message: util::tilde(path), icon: &icons::TRASH, confirm: "Move to Trash".into(), destructive: true,
             act: Act::ShellQuiet { cmd: format!("gio trash {}", util::quote(&path.display().to_string())), done: "Moved to Trash".into() },
