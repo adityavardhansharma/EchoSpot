@@ -6,6 +6,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::util;
 
+/// Where Search Files looks. With nothing set it is the home folder and every mounted drive.
+#[derive(Serialize, Deserialize, Clone, Default, PartialEq, Debug)]
+#[serde(default)]
+pub struct FileSearch {
+    /// Folders left out of the search, with everything inside them.
+    pub excluded: Vec<String>,
+    /// Mounted drives that are not searched, by where they are mounted.
+    pub drives_off: Vec<String>,
+    /// Find hidden files and folders too.
+    pub hidden: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
@@ -32,11 +44,12 @@ pub struct Settings {
     pub calendars: Vec<String>,
     /// The Liquid theme's glass.
     pub liquid: crate::glass::Level,
+    pub files: FileSearch,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false, liquid: Default::default() }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false, liquid: Default::default(), files: Default::default() }
     }
 }
 
