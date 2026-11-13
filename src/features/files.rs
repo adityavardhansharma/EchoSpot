@@ -112,8 +112,9 @@ impl Scope {
     /// The scope the settings ask for, over the home folder and the drives that are mounted.
     fn new(home: &Path, mounted: Vec<PathBuf>, settings: &crate::settings::FileSearch) -> Self {
         let excluded: Vec<PathBuf> = settings.excluded.iter().filter_map(|e| typed_folder(e, home)).collect();
-        // A root inside an excluded folder is not walked at all.
-        let roots = std::iter::once(home.to_path_buf()).chain(mounted)
+        let off: Vec<PathBuf> = settings.drives_off.iter().map(PathBuf::from).collect();
+        // A root inside an excluded folder is not walked at all, nor a drive that is switched off.
+        let roots = std::iter::once(home.to_path_buf()).chain(mounted.into_iter().filter(|drive| !off.contains(drive)))
             .filter(|root| !excluded.iter().any(|e| root.starts_with(e)))
             .collect();
         Self { roots, excluded }
@@ -318,6 +319,13 @@ mod tests {
     fn an_excluded_drive_is_not_walked() {
         let scope = Scope::new(Path::new("/home/me"), vec![PathBuf::from("/media/data106")], &excluding(&["/media/data106"]));
         assert_eq!(scope.roots, vec![PathBuf::from("/home/me")]);
+    }
+
+    #[test]
+    fn a_drive_switched_off_is_not_walked() {
+        let settings = crate::settings::FileSearch { drives_off: vec!["/media/data106".into()], ..Default::default() };
+        let scope = Scope::new(Path::new("/home/me"), vec![PathBuf::from("/media/data106"), PathBuf::from("/mnt/nas")], &settings);
+        assert_eq!(scope.roots, vec![PathBuf::from("/home/me"), PathBuf::from("/mnt/nas")]);
     }
 
     #[test]
