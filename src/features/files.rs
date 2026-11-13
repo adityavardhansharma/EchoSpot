@@ -88,6 +88,18 @@ fn drives(mountinfo: &str, home: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// A folder as someone types it, made a path: `~` is the home folder, a trailing slash is dropped.
+/// Nothing for a path that does not start at the root.
+pub fn typed_folder(text: &str, home: &Path) -> Option<PathBuf> {
+    let text = text.trim();
+    let path = match text.strip_prefix('~') {
+        Some(rest) if rest.is_empty() || rest.starts_with('/') => home.join(rest.trim_start_matches('/')),
+        _ => PathBuf::from(text),
+    };
+    // Collecting the components drops a trailing slash and any doubled one.
+    path.is_absolute().then(|| path.components().collect())
+}
+
 /// Everywhere a search looks: the home folder, then every mounted drive.
 fn roots() -> Vec<String> {
     let home = util::home();
@@ -238,6 +250,17 @@ pub fn build(app: &App, query: &str) -> Built {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_typed_folder_becomes_a_path() {
+        let home = Path::new("/home/me");
+        assert_eq!(typed_folder(" ~/Downloads/ ", home), Some(PathBuf::from("/home/me/Downloads")));
+        assert_eq!(typed_folder("~", home), Some(PathBuf::from("/home/me")));
+        assert_eq!(typed_folder("/media//data106/", home), Some(PathBuf::from("/media/data106")));
+        assert_eq!(typed_folder("Downloads", home), None);
+        assert_eq!(typed_folder("~other/x", home), None);
+        assert_eq!(typed_folder("", home), None);
+    }
 
     #[test]
     fn mounted_drives_are_searched() {
