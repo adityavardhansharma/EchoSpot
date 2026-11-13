@@ -270,6 +270,63 @@ fn place(address: &str, fx: f32, fy: f32, fw: f32, fh: f32) {
     set_frame(address, [x + w * fx + GAP, y + h * fy + GAP, w * fw - GAP * 2.0, h * fh - GAP * 2.0]);
 }
 
+/// The windows a snap layout arranges: those sharing a workspace with `first` (the window that
+/// had focus), or on the focused monitor's workspace when nothing had it. `first` leads.
+pub fn on_workspace(first: Option<&Client>) -> Vec<Client> {
+    let workspace = match first {
+        Some(c) => c.workspace.id,
+        None => {
+            let monitors: Vec<Monitor> = output("hyprctl", &["monitors", "-j"]).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+            match monitors.iter().find(|m| m.focused).or(monitors.first()) {
+                Some(m) => m.active_workspace.id,
+                None => return Vec::new(),
+            }
+        }
+    };
+    let mut all = clients();
+    all.retain(|c| !c.hidden && c.workspace.id == workspace);
+    if let Some(at) = first.and_then(|f| all.iter().position(|c| c.address == f.address)) {
+        let lead = all.remove(at);
+        all.insert(0, lead);
+    }
+    all
+}
+
+/// Puts the palette back on top with the keyboard: a window floated into a zone while the palette
+/// is open can land over it.
+pub fn raise_palette() {
+    let all: Vec<Client> = output("hyprctl", &["clients", "-j"]).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default();
+    if let Some(me) = all.iter().find(|c| c.class == crate::APP_ID && c.title == "EchoSpot") {
+        focus(&me.address);
+    }
+}
+
+/// Places a window in a snap zone: `[x, y, w, h]` as fractions of the work area.
+pub fn snap(address: &str, [fx, fy, fw, fh]: [f32; 4]) {
+    place(address, fx, fy, fw, fh);
+}
+
+/// The frame of the `overflow`th window past a layout's last zone: stepped down and in, so each
+/// one stacked there still shows.
+fn cascaded([x, y, w, h]: [f32; 4], overflow: usize) -> [f32; 4] {
+    let off = 28.0 * overflow as f32;
+    [x + off, y + off, (w - off).max(200.0), (h - off).max(150.0)]
+}
+
+/// Gives every window a zone, in order. Windows past the last zone cascade inside it.
+pub fn arrange(addresses: &[String], zones: &[[f32; 4]]) {
+    let (Some([x, y, w, h]), Some(last)) = (work_area(), zones.len().checked_sub(1)) else { return };
+    for (i, address) in addresses.iter().enumerate() {
+        let [fx, fy, fw, fh] = zones[i.min(last)];
+        let frame = [x + w * fx + GAP, y + h * fy + GAP, w * fw - GAP * 2.0, h * fh - GAP * 2.0];
+        remember(address);
+        set_frame(address, cascaded(frame, i.saturating_sub(last)));
+    }
+    if let Some(lead) = addresses.first() {
+        focus(lead);
+    }
+}
+
 /// Changes a window's frame from the one it has: a nudge to an edge, a step larger or smaller.
 fn adjust(address: &str, change: impl Fn([f32; 4], [f32; 4]) -> [f32; 4]) {
     let Some(area) = work_area() else { return };
@@ -387,5 +444,19 @@ pub fn run(op: WindowOp, address: &str) {
         Tile => {
             dispatch(&format!("hl.dsp.window.float({{ {w}, action = \"disable\" }})"), &["settiled", t]);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_past_the_last_zone_cascade() {
+        let zone = [100.0, 50.0, 800.0, 600.0];
+        assert_eq!(cascaded(zone, 0), zone);
+        assert_eq!(cascaded(zone, 2), [156.0, 106.0, 744.0, 544.0]);
+        // However many pile up, a window keeps a usable size.
+        assert_eq!(cascaded(zone, 40)[2..], [200.0, 150.0]);
     }
 }
