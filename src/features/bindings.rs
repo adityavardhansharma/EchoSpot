@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use rune::Tx;
+use rune::{Key, KeyEvent, Tx};
 use serde::{Deserialize, Serialize};
 
 use crate::app::{App, Tone};
@@ -67,6 +67,42 @@ pub fn hypr_chord(chord: &str) -> Option<String> {
 /// The chord in the palette's own spelling: `super+alt+c`.
 fn normal(chord: &str) -> String {
     chord.split('+').map(|p| p.trim().to_ascii_lowercase()).filter(|p| !p.is_empty()).collect::<Vec<_>>().join("+")
+}
+
+/// The chord a key press is, in the palette's own spelling (`super+alt+c`), or `None` for a
+/// key that cannot be part of one. `base` is the character the key types unshifted, so
+/// Shift+1 records as `shift+1` rather than `!`.
+pub fn chord_of(ev: &KeyEvent, base: Option<char>) -> Option<String> {
+    let name = |c: char| match c {
+        ' ' => Some("space".to_string()),
+        '+' => None,
+        c if c.is_control() => None,
+        c => Some(c.to_lowercase().to_string()),
+    };
+    let key = match &ev.key {
+        Key::Enter => "enter".to_string(),
+        Key::Tab => "tab".to_string(),
+        Key::Escape => "escape".to_string(),
+        Key::Backspace => "backspace".to_string(),
+        Key::Delete => "delete".to_string(),
+        Key::Left => "left".to_string(),
+        Key::Right => "right".to_string(),
+        Key::Up => "up".to_string(),
+        Key::Down => "down".to_string(),
+        Key::Home => "home".to_string(),
+        Key::End => "end".to_string(),
+        Key::PageUp => "page_up".to_string(),
+        Key::PageDown => "page_down".to_string(),
+        Key::Function(n) => format!("f{n}"),
+        Key::Command(c) => name(base.unwrap_or(*c))?,
+        Key::Text(t) => name(base.or_else(|| t.chars().next())?)?,
+        _ => return None,
+    };
+    let m = ev.mods;
+    let held = [(m.logo, "super"), (m.ctrl || m.cmd, "ctrl"), (m.alt, "alt"), (m.shift, "shift")];
+    let mut parts: Vec<&str> = held.iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect();
+    parts.push(&key);
+    Some(parts.join("+"))
 }
 
 fn lua_string(s: &str) -> String {
@@ -163,7 +199,24 @@ mod tests {
         assert_eq!(hypr_chord("shift+c"), None);
         assert_eq!(hypr_chord("super+a+b"), None);
         assert_eq!(hypr_chord("super"), None);
+        assert_eq!(hypr_chord("super+page_up").as_deref(), Some("SUPER + PAGE_UP"));
         assert_eq!(hypr_chord("shift+alt+super+c").as_deref(), Some("SUPER + ALT + SHIFT + C"));
         assert_eq!(hypr_chord("super+super+c").as_deref(), Some("SUPER + C"));
+    }
+
+    #[test]
+    fn recorded_chords() {
+        let ev = |key: Key, logo: bool, ctrl: bool, alt: bool, shift: bool| KeyEvent { key, mods: rune::Mods { shift, cmd: ctrl, alt, ctrl, logo } };
+        assert_eq!(chord_of(&ev(Key::Text("c".into()), true, false, true, false), Some('c')).as_deref(), Some("super+alt+c"));
+        assert_eq!(chord_of(&ev(Key::Command('k'), false, true, false, true), Some('k')).as_deref(), Some("ctrl+shift+k"));
+        // Shift+1 types "!", but the key is 1.
+        assert_eq!(chord_of(&ev(Key::Text("!".into()), true, false, false, true), Some('1')).as_deref(), Some("super+shift+1"));
+        assert_eq!(chord_of(&ev(Key::Text(" ".into()), false, false, true, false), None).as_deref(), Some("alt+space"));
+        assert_eq!(chord_of(&ev(Key::Function(5), true, false, false, false), None).as_deref(), Some("super+f5"));
+        // Every recorded chord is one Hyprland can bind.
+        assert_eq!(hypr_chord("super+alt+c").as_deref(), Some("SUPER + ALT + C"));
+        assert_eq!(hypr_chord("alt+space").as_deref(), Some("ALT + SPACE"));
+        // A plain key records, and is then refused as a hotkey.
+        assert_eq!(hypr_chord(&chord_of(&ev(Key::Text("c".into()), false, false, false, false), Some('c')).unwrap()), None);
     }
 }
