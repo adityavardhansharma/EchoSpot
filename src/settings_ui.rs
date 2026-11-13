@@ -110,6 +110,9 @@ pub struct SettingsUi {
     chats: usize,
     /// The drives mounted as the window opened.
     drives: Vec<std::path::PathBuf>,
+    /// The folder being typed for exclusion, and why the last one typed was not taken.
+    pub exclude: TextEdit,
+    exclude_error: String,
     probe: Probe,
     icons: crate::store::IconStore,
     /// The screen behind the panel, captured as the window opens.
@@ -154,7 +157,7 @@ impl SettingsUi {
     pub fn new() -> Self {
         let mut ui = Self {
             pane: Pane::General, settings: Settings::load(), model: TextEdit::new(""), base_url: TextEdit::new(""),
-            api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0, drives: Vec::new(),
+            api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0, drives: Vec::new(), exclude: TextEdit::new(""), exclude_error: String::new(),
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
             selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
@@ -179,6 +182,8 @@ impl SettingsUi {
         self.clipboard = (entries.len(), images, dir_size(&crate::util::data_dir().join("clipboard")));
         self.chats = ai::threads().len();
         self.drives = crate::features::files::mounted_drives();
+        self.exclude.replace_text("");
+        self.exclude_error.clear();
         self.probe = Probe::Idle;
         self.fetched = Default::default();
         self.check += 1;
@@ -214,7 +219,7 @@ impl SettingsUi {
     }
 
     fn editing(&self) -> bool {
-        self.model.focused || self.base_url.focused || self.api_key.focused || self.system_prompt.focused || self.filter.focused || self.alias.focused
+        self.model.focused || self.base_url.focused || self.api_key.focused || self.system_prompt.focused || self.filter.focused || self.alias.focused || self.exclude.focused
     }
 
     fn step_pane(&mut self, delta: i32) {
@@ -296,6 +301,28 @@ impl SettingsUi {
                 app.refresh();
             });
         }
+    }
+
+    // ---- File Search ----
+
+    /// Excludes the folder typed in the File Search pane, or says why it cannot.
+    fn exclude_typed(&mut self) {
+        let home = crate::util::home();
+        let Some(path) = crate::features::files::typed_folder(&self.exclude.text, &home) else {
+            self.exclude_error = if self.exclude.text.trim().is_empty() { String::new() } else { "Type the whole path, such as ~/Documents/Private or /media/drive/Backups.".into() };
+            return;
+        };
+        let known = |f: &String| crate::features::files::typed_folder(f, &home).as_ref() == Some(&path);
+        self.exclude_error = if !path.is_dir() {
+            "There is no folder at that path.".into()
+        } else if self.settings.files.excluded.iter().any(known) {
+            "That folder is already excluded.".into()
+        } else {
+            self.settings.files.excluded.push(crate::util::tilde(&path));
+            self.exclude.replace_text("");
+            self.commit();
+            String::new()
+        };
     }
 
     // ---- Commands ----
@@ -1192,7 +1219,8 @@ fn files(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         else { "Every mounted drive is searched unless it is switched off here. One mounted later is searched too." };
     vec![
         noted(p, "Search In", card(p, places), note),
-        noted(p, "Excluded Folders", card(p, excluded_rows(ui, p)), "Nothing inside an excluded folder is found, however deep."),
+        noted(p, "Excluded Folders", card(p, excluded_rows(ui, p)),
+            if ui.exclude_error.is_empty() { "Nothing inside an excluded folder is found, however deep." } else { ui.exclude_error.as_str() }),
     ]
 }
 
@@ -1213,6 +1241,16 @@ fn excluded_rows(ui: &SettingsUi, p: &Palette) -> Vec<El> {
     if rows.is_empty() {
         rows.push(setting(p, "Nothing excluded", "Folders you exclude from the search appear here.", el()));
     }
+    // The last row takes a new one: a path typed or pasted, then Return or Add.
+    let typing = field_box(p, "exclude", ui.exclude.focused).grow(1.0).min_w(0.0)
+        .child(text_input(&ui.exclude, type_::ROW_TITLE).key("exclude").single_line().grow(1.0).color(p.text)
+            .placeholder("~/Documents/Private", p.text_tertiary).no_focus_ring()
+            .on_edit(|ui: &mut SettingsUi| &mut ui.exclude)
+            .on_input_change(|ui: &mut SettingsUi, _| ui.exclude_error.clear())
+            .on_submit(|ui: &mut SettingsUi, _| ui.exclude_typed()));
+    rows.push(row().w_full().min_h(44.0).px(INSET).py(space::LG).gap(space::XL).center_y()
+        .child(typing)
+        .child(button(p, "exclude-add", "Add", false, |ui, _| ui.exclude_typed())));
     rows
 }
 
