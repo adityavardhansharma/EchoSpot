@@ -26,7 +26,7 @@ impl FileSearch {
         self.results.set_waker(waker);
     }
 
-    pub fn request(&mut self, query: &str) {
+    pub fn request(&mut self, query: &str, settings: &crate::settings::FileSearch) {
         let q = query.trim().to_string();
         if q == self.requested {
             return;
@@ -38,8 +38,9 @@ impl FileSearch {
             self.answered.clear();
             return;
         }
-        self.results.request(q, |q| {
-            let hits = search(&q);
+        let settings = settings.clone();
+        self.results.request(q, move |q| {
+            let hits = search(&q, &settings);
             (q, hits)
         });
     }
@@ -100,26 +101,61 @@ pub fn typed_folder(text: &str, home: &Path) -> Option<PathBuf> {
     path.is_absolute().then(|| path.components().collect())
 }
 
-/// Everywhere a search looks: the home folder, then every mounted drive.
-fn roots() -> Vec<String> {
-    let home = util::home();
-    let mounted = std::fs::read_to_string("/proc/self/mountinfo").map(|m| drives(&m, &home)).unwrap_or_default();
-    std::iter::once(home).chain(mounted).map(|p| p.display().to_string()).collect()
+/// What a search covers: the folders it walks, and the folders inside them it leaves alone.
+#[derive(Debug, PartialEq)]
+struct Scope {
+    roots: Vec<PathBuf>,
+    excluded: Vec<PathBuf>,
 }
 
-fn search(query: &str) -> Vec<PathBuf> {
-    let roots = roots();
+impl Scope {
+    /// The scope the settings ask for, over the home folder and the drives that are mounted.
+    fn new(home: &Path, mounted: Vec<PathBuf>, settings: &crate::settings::FileSearch) -> Self {
+        let excluded: Vec<PathBuf> = settings.excluded.iter().filter_map(|e| typed_folder(e, home)).collect();
+        // A root inside an excluded folder is not walked at all.
+        let roots = std::iter::once(home.to_path_buf()).chain(mounted)
+            .filter(|root| !excluded.iter().any(|e| root.starts_with(e)))
+            .collect();
+        Self { roots, excluded }
+    }
+
+    /// fd's `--exclude` globs for one root: each excluded folder inside it, anchored at the root.
+    fn globs(&self, root: &Path) -> Vec<String> {
+        self.excluded.iter().filter_map(|e| e.strip_prefix(root).ok())
+            .map(|rest| format!("/{}", glob_escape(&rest.display().to_string())))
+            .collect()
+    }
+
+    fn admits(&self, path: &Path) -> bool {
+        !self.excluded.iter().any(|e| path.starts_with(e))
+    }
+}
+
+fn glob_escape(s: &str) -> String {
+    s.chars().flat_map(|c| if "\\*?[]{}!".contains(c) { vec!['\\', c] } else { vec![c] }).collect()
+}
+
+fn search(query: &str, settings: &crate::settings::FileSearch) -> Vec<PathBuf> {
+    let home = util::home();
+    let mounted = std::fs::read_to_string("/proc/self/mountinfo").map(|m| drives(&m, &home)).unwrap_or_default();
+    let scope = Scope::new(&home, mounted, settings);
     let mut hits = if util::has_program("fd") {
         // Smart case, every term somewhere in the path's name, hidden and ignored files left out.
         let pattern = query.split_whitespace().map(regex_escape).collect::<Vec<_>>().join(".*");
-        let mut args = vec!["--max-results", "200", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", "--exclude", ".Trash-*", "--exclude", "lost+found", &pattern];
-        args.extend(roots.iter().map(String::as_str));
-        run_lines("fd", &args)
+        // One walk per root, so a folder excluded from one drive is not excluded from another.
+        scope.roots.iter().flat_map(|root| {
+            let (root_text, globs) = (root.display().to_string(), scope.globs(root));
+            let mut args = vec!["--max-results", "200", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", "--exclude", ".Trash-*", "--exclude", "lost+found"];
+            args.extend(globs.iter().flat_map(|g| ["--exclude", g.as_str()]));
+            args.extend([pattern.as_str(), root_text.as_str()]);
+            run_lines("fd", &args)
+        }).collect()
     } else {
-        let places = roots.iter().map(|r| util::quote(r)).collect::<Vec<_>>().join(" ");
-        let script = format!("find {places} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 200", util::quote(&format!("*{query}*")));
-        util::sh_output(&script).map(|o| o.lines().map(PathBuf::from).collect()).unwrap_or_default()
+        let places = scope.roots.iter().map(|r| util::quote(&r.display().to_string())).collect::<Vec<_>>().join(" ");
+        let script = format!("find {places} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 400", util::quote(&format!("*{query}*")));
+        util::sh_output(&script).map(|o| o.lines().map(PathBuf::from).collect::<Vec<_>>()).unwrap_or_default()
     };
+    hits.retain(|hit| scope.admits(hit));
     // Shallow paths and exact names first: the file someone means is rarely the deepest one.
     let q = query.to_lowercase();
     hits.sort_by_key(|p| {
@@ -260,6 +296,28 @@ mod tests {
         assert_eq!(typed_folder("Downloads", home), None);
         assert_eq!(typed_folder("~other/x", home), None);
         assert_eq!(typed_folder("", home), None);
+    }
+
+    fn excluding(folders: &[&str]) -> crate::settings::FileSearch {
+        crate::settings::FileSearch { excluded: folders.iter().map(|f| f.to_string()).collect(), ..Default::default() }
+    }
+
+    #[test]
+    fn excluded_folders_are_left_out() {
+        let (home, drive) = (Path::new("/home/me"), PathBuf::from("/media/data106"));
+        let scope = Scope::new(home, vec![drive.clone()], &excluding(&["~/Private", "/media/data106/Back[up]"]));
+        assert_eq!(scope.roots, vec![home.to_path_buf(), drive.clone()]);
+        assert_eq!(scope.globs(home), vec!["/Private"]);
+        assert_eq!(scope.globs(&drive), vec!["/Back\\[up\\]"]);
+        assert!(!scope.admits(Path::new("/home/me/Private/taxes.pdf")));
+        assert!(scope.admits(Path::new("/home/me/Privateer/map.png")));
+        assert!(scope.admits(Path::new("/media/data106/Private/x")));
+    }
+
+    #[test]
+    fn an_excluded_drive_is_not_walked() {
+        let scope = Scope::new(Path::new("/home/me"), vec![PathBuf::from("/media/data106")], &excluding(&["/media/data106"]));
+        assert_eq!(scope.roots, vec![PathBuf::from("/home/me")]);
     }
 
     #[test]

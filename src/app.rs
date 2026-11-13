@@ -202,7 +202,8 @@ impl App {
         let query = self.top().query.text.clone();
         let filter = self.top().filter;
         if route == Route::Files {
-            self.files.request(&query);
+            let scope = self.settings.files.clone();
+            self.files.request(&query, &scope);
         }
         let built = match route {
             Route::Root => features::root::build(self, &query),
