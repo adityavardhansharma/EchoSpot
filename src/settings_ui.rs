@@ -62,8 +62,9 @@ struct PaneInfo {
     tint: Tint,
 }
 
-const PANES: [PaneInfo; 6] = [
+const PANES: [PaneInfo; 7] = [
     PaneInfo { pane: Pane::General, title: "General", glyph: &icons::GEAR, tint: Tint::Graphite },
+    PaneInfo { pane: Pane::Commands, title: "Commands", glyph: &icons::BOLT, tint: Tint::Pink },
     PaneInfo { pane: Pane::Ai, title: "AI", glyph: &icons::AI, tint: Tint::Violet },
     PaneInfo { pane: Pane::Clipboard, title: "Clipboard", glyph: &icons::CLIPBOARD, tint: Tint::Orange },
     PaneInfo { pane: Pane::Extensions, title: "Extensions", glyph: &icons::PUZZLE, tint: Tint::Green },
@@ -512,6 +513,7 @@ pub fn setup(ui: &mut SettingsUi, waker: rune::Waker) {
 pub fn open(pane: &str) {
     let Some((handle, window)) = WINDOW.get() else { return };
     let pane = match pane {
+        "commands" => Some(Pane::Commands),
         "ai" => Some(Pane::Ai),
         "clipboard" => Some(Pane::Clipboard),
         "extensions" => Some(Pane::Extensions),
@@ -762,6 +764,154 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
             setting(p, "Summon EchoSpot", "", ui::keycaps_row(p, "super+space", true)),
         ]), "Bound in ~/.config/hypr/bindings.lua to `echospot toggle`."),
     ]
+}
+
+/// The two scopes of the Commands table, as a segmented capsule.
+fn scope_control(ui: &SettingsUi, p: &Palette) -> El {
+    let segment = |key: &str, label: &str, assigned: bool| {
+        let on = ui.assigned_only == assigned;
+        row().key(key.to_string()).h(22.0).px(space::LG).center().radius(11.0).motion(motion::HOVER)
+            .fill(if !on { Color::TRANSPARENT } else if p.dark { Color::WHITE.alpha(0.16) } else { Color::WHITE })
+            .on_press(move |ui: &mut SettingsUi| {
+                ui.assigned_only = assigned;
+                ui.refilter();
+            })
+            .child(text(label.to_string()).font(CONTROL).color(if on { p.text } else { p.text_secondary }))
+    };
+    row().h(28.0).px(3.0).center_y().radius(14.0).fill(p.control_surface)
+        .child(segment("scope-all", "All", false)).child(segment("scope-assigned", "Assigned", true))
+}
+
+/// A cell of the table with nothing in it yet: it lights under the pointer, and on the
+/// selected row says what a click there does.
+fn empty_cell(p: &Palette, key: String, width: f32, hint: &str, shown: bool) -> El {
+    row().key(key).w(width).h(CONTROL_H).px(space::MD).center_y().radius(radius::BAR_CONTROL)
+        .fill(Color::TRANSPARENT).hover(p.control_surface).press(p.control_hover).motion(motion::HOVER)
+        .child(text(if shown { hint.to_string() } else { String::new() }).font(CONTROL).color(p.text_tertiary))
+}
+
+fn alias_cell(ui: &SettingsUi, p: &Palette, c: &Command, selected: bool) -> El {
+    let id = c.id.clone();
+    if ui.alias_for.as_deref() == Some(&c.id) && ui.alias.focused {
+        return field_box(p, "alias", true).w(ALIAS_W).h(CONTROL_H).px(space::MD)
+            .child(text_input(&ui.alias, CONTROL).key("alias").single_line().grow(1.0).color(p.text)
+                .placeholder("Alias", p.text_tertiary).no_focus_ring()
+                .on_edit(|ui: &mut SettingsUi| &mut ui.alias)
+                .on_input_change(|ui: &mut SettingsUi, _| ui.alias_changed())
+                .on_submit(|ui: &mut SettingsUi, tx| {
+                    ui.end_alias(false);
+                    tx.blur();
+                }));
+    }
+    let cell = match ui.bindings.aliases.get(&c.id) {
+        Some(alias) => row().key(format!("alias-{id}")).w(ALIAS_W).h(CONTROL_H).center_y()
+            .child(row().h(22.0).max_w(ALIAS_W).px(space::MD).center_y().radius(radius::KEY_CAP)
+                .fill(p.control_surface).hover(p.control_hover).motion(motion::HOVER)
+                .child(text(alias.clone()).font(CONTROL).color(p.text.alpha(0.92)).truncate())),
+        None => empty_cell(p, format!("alias-{id}"), ALIAS_W, "Add Alias", selected),
+    };
+    cell.on_press(move |ui: &mut SettingsUi| ui.begin_alias(&id))
+}
+
+fn hotkey_cell(ui: &SettingsUi, p: &Palette, c: &Command, selected: bool) -> El {
+    let id = c.id.clone();
+    if ui.recording.as_deref() == Some(&c.id) {
+        let failed = !ui.record_error.is_empty();
+        let m = ui.held;
+        let held: Vec<&str> = [(m.logo, "super"), (m.ctrl || m.cmd, "ctrl"), (m.alt, "alt"), (m.shift, "shift")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect();
+        let inside = if failed {
+            text(ui.record_error.clone()).font(CONTROL).color(p.destructive).truncate().grow(1.0)
+        } else if held.is_empty() {
+            text("Press a hotkey…").font(CONTROL).color(p.text_secondary).grow(1.0)
+        } else {
+            row().grow(1.0).gap(space::XS).center_y().child(ui::keycaps_row(p, &held.join("+"), true))
+                .child(text("…").font(CONTROL).color(p.text_tertiary))
+        };
+        return row().key("recorder").w(HOTKEY_W).h(CONTROL_H).px(space::MD).center_y().radius(radius::BAR_CONTROL)
+            .fill(if p.dark { Color::BLACK.alpha(0.22) } else { Color::BLACK.alpha(0.035) })
+            .border(2.0, if failed { p.destructive.alpha(0.85) } else { accent(p).alpha(0.85) }).motion(motion::HOVER)
+            .child(inside);
+    }
+    let Some(chord) = ui.bindings.hotkeys.get(&c.id) else {
+        return empty_cell(p, format!("hotkey-{id}"), HOTKEY_W, "Record Hotkey", selected)
+            .on_press_tx(move |ui: &mut SettingsUi, tx| ui.begin_record(&id, tx));
+    };
+    let record = id.clone();
+    let mut cell = row().key(format!("hotkey-{id}")).w(HOTKEY_W).h(CONTROL_H).pl(space::XS).gap(space::XS).center_y().radius(radius::BAR_CONTROL)
+        .fill(Color::TRANSPARENT).hover(p.control_surface).motion(motion::HOVER)
+        .on_press_tx(move |ui: &mut SettingsUi, tx| ui.begin_record(&record, tx))
+        .child(ui::keycaps_row(p, chord, true)).child(spacer());
+    if selected {
+        cell = cell.child(el().key(format!("unbind-{id}")).size(CONTROL_H - 4.0, CONTROL_H - 4.0).mr(space::XXS).center().radius(radius::KEY_CAP)
+            .hover(p.control_hover).press(p.control_pressed).motion(motion::HOVER)
+            .on_press(move |ui: &mut SettingsUi| {
+                ui.stop_recording();
+                ui.set_hotkey(&id, "");
+            })
+            .child(icon(&icons::X, 11.0).color(p.text_secondary)));
+    }
+    cell
+}
+
+fn command_row(ui: &SettingsUi, p: &Palette, scale: f32, c: &Command) -> El {
+    let id = c.id.clone();
+    let selected = ui.selected.as_deref() == Some(&c.id);
+    let r = row().key(row_key(&c.id)).w_full().h(COMMAND_ROW_H).px(INSET - space::XS).gap(space::LG).center_y().radius(CARD_R - space::XS);
+    let r = if selected { r.fill(p.selection) } else { r.fill(Color::TRANSPARENT).hover(p.row_hover) };
+    r.on_press(move |ui: &mut SettingsUi| ui.select(&id))
+        .child(ui::icon_slot(&ui.icons, p, scale, &c.icon, 26.0))
+        .child(col().grow(1.0).min_w(0.0).gap(1.0)
+            .child(text(c.title.clone()).font(type_::ROW_TITLE).color(p.text).truncate())
+            .child(text(c.kind.clone()).font(NOTE).color(p.text_secondary).truncate()))
+        .child(alias_cell(ui, p, c, selected))
+        .child(hotkey_cell(ui, p, c, selected))
+}
+
+/// The Commands pane: a search, and under it every launcher row with its alias and hotkey.
+/// Unlike the other panes it is one table that fills the window and scrolls inside its card.
+fn commands(ui: &SettingsUi, p: &Palette, scale: f32) -> El {
+    let search = field_box(p, "command-filter", ui.filter.focused).grow(1.0).min_w(0.0).gap(space::SM)
+        .child(icon(&icons::SEARCH, 13.0).color(p.text_tertiary))
+        .child(text_input(&ui.filter, type_::ROW_TITLE).key("command-filter").single_line().grow(1.0).color(p.text)
+            .placeholder("Search commands, aliases and hotkeys", p.text_tertiary).no_focus_ring()
+            .on_edit(|ui: &mut SettingsUi| &mut ui.filter)
+            .on_input_change(|ui: &mut SettingsUi, _| ui.refilter())
+            .on_submit(|ui: &mut SettingsUi, tx| ui.record_selected(tx)));
+    let heading = |label: &str| text(label.to_string()).font(type_::SECTION).color(p.text_tertiary);
+    let header = row().w_full().h(30.0).px(INSET).gap(space::LG).center_y()
+        .child(heading("Name").grow(1.0))
+        .child(heading("Alias").w(ALIAS_W).pl(space::MD))
+        .child(heading("Hotkey").w(HOTKEY_W).pl(space::XS));
+    let body = if ui.shown.is_empty() {
+        let (title, note) = if ui.commands.is_empty() {
+            ("Loading commands…".to_string(), String::new())
+        } else if !ui.filter.text.trim().is_empty() {
+            (format!("Nothing matches “{}”", ui.filter.text.trim()), "Search by name, kind, alias or hotkey.".to_string())
+        } else {
+            ("Nothing assigned yet".to_string(), "Commands you give an alias or a hotkey are gathered here.".to_string())
+        };
+        col().w_full().grow(1.0).center().gap(space::XS).px(space::XXL)
+            .child(icon(&icons::KEYBOARD, 22.0).color(p.text_tertiary)).child(el().h(space::XS))
+            .child(text(title).font(type_::ROW_TITLE).color(p.text_secondary))
+            .child(text(note).font(NOTE).color(p.text_tertiary))
+    } else {
+        col().key("command-scroll").w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_edge_fade(14.0)
+            .child(col().w_full().padding(space::XS).gap(1.0).children(ui.shown.iter().map(|&i| command_row(ui, p, scale, &ui.commands[i]))))
+    };
+    let table = card_surface(p).grow(1.0).min_h(0.0).clip_rounded(CARD_R)
+        .child(header)
+        .child(el().w_full().h(size::HAIRLINE).fill(p.separator.alpha(if p.dark { 0.08 } else { 0.09 })))
+        .child(body);
+    let note = if ui.recording.is_some() {
+        "Press the keys to use, with Super, Ctrl or Alt among them. ⌫ removes the hotkey; esc keeps the old one.".to_string()
+    } else {
+        let assigned = ui.commands.iter().filter(|c| ui.bindings.aliases.contains_key(&c.id) || ui.bindings.hotkeys.contains_key(&c.id)).count();
+        format!("{} commands, {assigned} assigned. An alias typed in the launcher puts its command first; a hotkey runs it from anywhere.", ui.commands.len())
+    };
+    col().key("commands-pane").w_full().grow(1.0).min_h(0.0).px(space::XXL + space::XS).pt(space::SM).pb(space::XL + space::XS).gap(space::XL)
+        .child(row().w_full().gap(space::LG).center_y().child(search).child(scope_control(ui, p)))
+        .child(table)
+        .child(footnote(p, note))
 }
 
 /// A provider's tile: its letter on its colour, lit like every other tile here.
@@ -1103,8 +1253,9 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
             .on_press(|_: &mut SettingsUi| { crate::util::spawn_detached(&["xdg-open".into(), Settings::path().display().to_string()]); }))
         .child(tool_button(&p, "done", &icons::X).on_press_tx(|_: &mut SettingsUi, tx| tx.close_window()));
     let left = SIDEBAR_GAP + SIDEBAR_W;
-    let detail = col().key("detail").pin(Some(left), FULL, FULL, FULL).child(toolbar)
-        .child(col().key(format!("settings-scroll-{}", info.title)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_fade(fade).child(content));
+    let detail = col().key("detail").pin(Some(left), FULL, FULL, FULL).child(toolbar);
+    let detail = if ui.pane == Pane::Commands { detail.child(commands(ui, &p, scale)) } else { detail
+        .child(col().key(format!("settings-scroll-{}", info.title)).w_full().grow(1.0).min_h(0.0).scroll(ScrollSpec { stick_bottom: false }).scroll_fade(fade).child(content)) };
     let panel = ui::panel_surface("settings-panel", &p, PANEL, ui.has_backdrop.then_some(&ui.backdrop), &ui.settings.backdrop)
         .child(detail)
         .child(sidebar(ui, &p))
