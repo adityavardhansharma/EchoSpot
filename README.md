@@ -14,7 +14,8 @@ A native Raycast alternative for Omarchy, built with [Rune](https://github.com/a
 - **Calculator**: Arithmetic in symbols or words, percentages, functions, number bases, unit conversions and unit arithmetic, live currency and crypto rates, date maths and countdowns (`days until 25 dec`), and time zones (`5pm london in tokyo`). Also `echospot calc <expression>` from a terminal.
 - **Clipboard History**: Resident clipboard manager for text and images.
 - **Emoji & Symbols**: Searchable emoji and symbol catalogue with recents and pins.
-- **File Search**: Quick file finder.
+- **File Search**: Quick file finder over your home folder and every mounted drive. Settings →
+  File Search switches a drive off or excludes a folder; so does Ctrl+Shift+X on a result.
 - **Snippets & Quicklinks**: Saved text and custom search shortcuts. Snippets can expand as you
   type their keyword in any app (off by default; Settings → General).
 - **Notes**: Markdown notes kept as plain files in `~/.local/share/echospot/notes`.
