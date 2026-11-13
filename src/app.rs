@@ -265,8 +265,7 @@ impl App {
         self.settings = crate::settings::Settings::load();
         self.snippets = features::snippets::Snippets::load();
         self.quicklinks = features::quicklinks::Quicklinks::load();
-        self.bindings = features::bindings::Bindings::load();
-        self.bindings.apply();
+        self.bindings.reload();
         self.ai_library = features::ai_library::Library::load();
         self.scripts = features::scripts::load();
         self.notes = features::notes::load();

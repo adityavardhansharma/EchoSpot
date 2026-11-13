@@ -117,6 +117,14 @@ impl Bindings {
         util::write_json(&path(), self);
     }
 
+    /// Reads the file again and registers what it now says, still knowing which chords this
+    /// process bound, so one that was removed is unbound.
+    pub fn reload(&mut self) {
+        let applied = std::mem::take(&mut self.applied);
+        *self = Self { applied, ..Self::load() };
+        self.apply();
+    }
+
     /// Registers every hotkey with Hyprland, off the UI thread. Safe to repeat: each chord is
     /// unbound before it is bound, so a config reload that dropped them is repaired by the next call.
     pub fn apply(&mut self) {
