@@ -1294,7 +1294,8 @@ fn extensions(ui: &SettingsUi, p: &Palette, scale: f32) -> Vec<El> {
     vec![store, noted(p, &title, card(p, rows), "Extensions run in Node, in a process of their own.")]
 }
 
-const SHORTCUTS: [(&str, &[(&str, &str)]); 4] = [
+const SHORTCUTS: [(&str, &[(&str, &str)]); 5] = [
+
     ("Everywhere", &[
         ("Run the selected row", "enter"), ("Show its actions", "ctrl+k"), ("Move through rows", "up"), ("Next row", "ctrl+n"),
         ("Previous row", "ctrl+p"), ("Back, or clear the search", "escape"), ("Back when the search is empty", "backspace"), ("Hide the palette", "ctrl+w"),
@@ -1302,6 +1303,10 @@ const SHORTCUTS: [(&str, &[(&str, &str)]); 4] = [
     ("Launcher", &[
         ("Ask Quick AI what is typed", "tab"), ("Add to or remove from Favorites", "ctrl+shift+f"), ("Copy the name or answer", "ctrl+shift+c"),
         ("Set the row's alias and hotkey", "ctrl+shift+k"), ("Open Settings", "ctrl+,"), ("Quit EchoSpot", "ctrl+q"),
+    ]),
+    ("Search Files", &[
+        ("Show in the file manager", "ctrl+enter"), ("Copy the path", "ctrl+shift+c"), ("Copy the file", "ctrl+shift+f"),
+        ("Exclude its folder from the search", "ctrl+shift+x"), ("Open a terminal there", "ctrl+t"), ("Move to Trash", "ctrl+x"),
     ]),
     ("AI", &[
         ("Pick a model", "tab"), ("Paste the answer", "ctrl+enter"), ("Ask again", "ctrl+r"), ("Continue Quick AI as a chat", "ctrl+t"), ("New chat", "ctrl+shift+n"),
