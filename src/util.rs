@@ -33,8 +33,16 @@ pub fn has_program(name: &str) -> bool {
 
 /// Starts a program that outlives the palette: its own session, no inherited stdio.
 pub fn spawn_detached(argv: &[String]) -> bool {
+    spawn_detached_in(argv, None)
+}
+
+/// `spawn_detached`, started in a directory of its own.
+pub fn spawn_detached_in(argv: &[String], dir: Option<&std::path::Path>) -> bool {
     let Some((program, args)) = argv.split_first() else { return false };
     let mut cmd = Command::new(program);
+    if let Some(dir) = dir {
+        cmd.current_dir(dir);
+    }
     cmd.args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     // Activation tokens belong to the palette's own launch, not to what it starts.
     cmd.env_remove("XDG_ACTIVATION_TOKEN").env_remove("DESKTOP_STARTUP_ID");
