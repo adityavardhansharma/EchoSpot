@@ -144,6 +144,18 @@ impl Bindings {
         self.hotkeys.iter().find(|(id, c)| id.as_str() != except && hypr_chord(c).as_ref() == Some(&wanted)).map(|(id, _)| id.as_str())
     }
 
+    /// Lets go of every hotkey until the next `apply`, so a chord being recorded reaches the
+    /// recorder instead of running its command.
+    pub fn suspend(&mut self) {
+        if self.applied.is_empty() || !crate::features::windows::hyprland() {
+            return;
+        }
+        let lua: String = self.applied.drain(..).map(|c| format!("hl.unbind({}); ", lua_string(&c))).collect();
+        std::thread::spawn(move || {
+            util::output("hyprctl", &["eval", &lua]);
+        });
+    }
+
     /// Registers every hotkey with Hyprland, off the UI thread. Safe to repeat: each chord is
     /// unbound before it is bound, so a config reload that dropped them is repaired by the next call.
     pub fn apply(&mut self) {
