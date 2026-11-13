@@ -28,13 +28,14 @@ fn path() -> std::path::PathBuf {
 
 /// `super+alt+c` as Hyprland writes it, `SUPER + ALT + C`; `None` when it is not a usable chord.
 pub fn hypr_chord(chord: &str) -> Option<String> {
-    let (mut mods, mut key) = (Vec::new(), None);
+    // Modifiers are held as flags, so the result reads the same however they were ordered.
+    let (mut held, mut key) = ([false; 4], None);
     for part in chord.split('+').map(|p| p.trim().to_ascii_lowercase()).filter(|p| !p.is_empty()) {
         match part.as_str() {
-            "super" | "win" | "cmd" | "meta" => mods.push("SUPER"),
-            "ctrl" | "control" => mods.push("CTRL"),
-            "alt" | "opt" | "option" => mods.push("ALT"),
-            "shift" => mods.push("SHIFT"),
+            "super" | "win" | "cmd" | "meta" => held[0] = true,
+            "ctrl" | "control" => held[1] = true,
+            "alt" | "opt" | "option" => held[2] = true,
+            "shift" => held[3] = true,
             other if key.is_none() => key = Some(match other {
                 "enter" | "return" => "RETURN".to_string(),
                 "esc" | "escape" => "ESCAPE".to_string(),
@@ -55,11 +56,11 @@ pub fn hypr_chord(chord: &str) -> Option<String> {
             _ => return None,
         }
     }
-    mods.dedup();
     // A bare key, or Shift alone with one, would swallow ordinary typing.
-    if !mods.iter().any(|m| *m != "SHIFT") {
+    if !held[..3].contains(&true) {
         return None;
     }
+    let mods: Vec<&str> = ["SUPER", "CTRL", "ALT", "SHIFT"].into_iter().zip(held).filter(|(_, on)| *on).map(|(name, _)| name).collect();
     Some(format!("{} + {}", mods.join(" + "), key?))
 }
 
@@ -162,5 +163,7 @@ mod tests {
         assert_eq!(hypr_chord("shift+c"), None);
         assert_eq!(hypr_chord("super+a+b"), None);
         assert_eq!(hypr_chord("super"), None);
+        assert_eq!(hypr_chord("shift+alt+super+c").as_deref(), Some("SUPER + ALT + SHIFT + C"));
+        assert_eq!(hypr_chord("super+super+c").as_deref(), Some("SUPER + C"));
     }
 }
