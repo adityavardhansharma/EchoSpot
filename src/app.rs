@@ -125,6 +125,10 @@ pub struct App {
     /// The screen behind the panel, captured as it was summoned.
     pub backdrop: rune::Pixels,
     pub has_backdrop: bool,
+    /// The same capture, kept whole for the Liquid theme's lens to refract.
+    pub glass: crate::glass::Shot,
+    /// Whether the system is dark, as the last frame saw it: the glass's tint follows it.
+    pub system_dark: std::cell::Cell<bool>,
     pub was_focused: bool,
     /// What the system's switches read when last asked: the state on a toggle's row.
     pub status: system::Status,
@@ -169,6 +173,8 @@ impl App {
             settings: crate::settings::Settings::load(),
             backdrop: rune::Pixels::new(),
             has_backdrop: false,
+            glass: Default::default(),
+            system_dark: std::cell::Cell::new(true),
             was_focused: false,
             status: system::Status::default(),
             last_step: f64::NEG_INFINITY,
@@ -333,14 +339,31 @@ impl App {
         tx.close_window();
     }
 
+    /// Takes a picture of the screen behind the panel as the panel's surface, for whichever
+    /// material the theme draws. False when the theme shows none of it.
+    pub fn set_backdrop(&mut self, w: u32, h: u32, rgba: Vec<u8>) -> bool {
+        if self.settings.liquid() {
+            self.glass.set(w, h, rgba);
+        } else if self.settings.backdrop == "capture" {
+            self.backdrop.set(w, h, rgba);
+            self.has_backdrop = true;
+        } else {
+            return false;
+        }
+        true
+    }
+
     /// Called as the palette is summoned: note what it covers, then show fresh rows.
     pub fn will_show(&mut self) {
         self.prev_window = windows::active();
         self.has_backdrop = false;
-        if self.settings.backdrop == "capture"
-            && let Some((w, h, rgba)) = crate::backdrop::capture(self.settings.top_margin) {
-            self.backdrop.set(w, h, rgba);
-            self.has_backdrop = true;
+        self.glass.clear();
+        if self.settings.liquid() || self.settings.backdrop == "capture" {
+            // A capture for the first frames; the live backdrop follows the screen from there.
+            if let Some((w, h, rgba)) = crate::backdrop::capture(self.settings.top_margin) {
+                self.set_backdrop(w, h, rgba);
+            }
+            crate::live::start_palette();
         }
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
         self.scripts = features::scripts::load();
@@ -925,5 +948,15 @@ impl Built {
     pub fn keep(mut self) -> Self {
         self.keep_selection = true;
         self
+    }
+}
+
+impl crate::glass::Liquid for App {
+    fn pane(&self) -> Option<crate::glass::Pane<'_>> {
+        self.settings.liquid().then(|| crate::glass::Pane {
+            window: (crate::theme::size::WINDOW_W, crate::theme::size::WINDOW_H),
+            dark: self.system_dark.get(), level: self.settings.liquid,
+            shot: &self.glass,
+        })
     }
 }
