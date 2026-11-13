@@ -170,6 +170,13 @@ impl SettingsUi {
         self.probe = Probe::Idle;
         self.fetched = Default::default();
         self.check += 1;
+        self.stop_recording();
+        self.end_alias(false);
+        self.bindings = Bindings::load();
+        self.filter.replace_text("");
+        self.assigned_only = false;
+        self.selected = None;
+        self.refilter();
     }
 
     /// Takes the patch of screen the window is about to cover, as the palette does when summoned.
@@ -197,7 +204,14 @@ impl SettingsUi {
 
     /// Turns to a pane. The AI pane asks its provider whether it is there the first time it shows.
     fn show(&mut self, pane: Pane) {
+        self.stop_recording();
+        self.end_alias(false);
         self.pane = pane;
+        // The search has the keyboard, as it does in the palette, unless a row was asked for.
+        self.filter.focused = pane == Pane::Commands && self.reveal.is_none();
+        if pane == Pane::Commands {
+            self.load_commands();
+        }
         if pane == Pane::Ai && self.probe == Probe::Idle && self.settings.ai.ready() {
             self.test_connection();
         }
@@ -266,8 +280,75 @@ impl SettingsUi {
 
     // ---- Commands ----
 
+    /// Asks the palette for its rows: only it knows the apps, extensions and scripts there are.
+    fn load_commands(&self) {
+        let Some(main) = MAIN.get() else { return };
+        main.update(|app: &mut App, _| {
+            let list = crate::features::root::catalog(app);
+            if let Some((handle, _)) = WINDOW.get() {
+                handle.update(move |ui, tx| ui.take_commands(list, tx));
+            }
+        });
+    }
+
+    fn take_commands(&mut self, list: Vec<Command>, tx: &mut Tx) {
+        self.commands = list;
+        if let Some(id) = self.reveal.take().filter(|id| self.commands.iter().any(|c| &c.id == id)) {
+            self.filter.replace_text("");
+            self.assigned_only = false;
+            self.selected = Some(id.clone());
+            tx.scroll_into_view(row_key(&id));
+        }
+        self.refilter();
+    }
+
+    /// Works out which rows the search and the scope leave. A row stays listed while its alias
+    /// or hotkey is edited, even once it no longer matches: it must not leave under the hand.
+    fn refilter(&mut self) {
+        let needle = self.filter.text.to_lowercase();
+        let terms: Vec<&str> = needle.split_whitespace().collect();
+        self.shown = self.commands.iter().enumerate().filter(|(_, c)| {
+            let (alias, chord) = (self.bindings.aliases.get(&c.id), self.bindings.hotkeys.get(&c.id));
+            if self.assigned_only && alias.is_none() && chord.is_none() {
+                return false;
+            }
+            if terms.is_empty() {
+                return true;
+            }
+            let hay = format!("{} {} {} {}", c.title, c.kind, alias.map(String::as_str).unwrap_or(""), chord.map(String::as_str).unwrap_or("")).to_lowercase();
+            terms.iter().all(|t| hay.contains(t))
+        }).map(|(i, _)| i).collect();
+        if !self.selected.as_ref().is_some_and(|id| self.shown.iter().any(|&i| &self.commands[i].id == id)) {
+            self.selected = None;
+        }
+    }
+
     fn title_of(&self, id: &str) -> String {
         self.commands.iter().find(|c| c.id == id).map(|c| c.title.clone()).unwrap_or_else(|| id.to_string())
+    }
+
+    fn select(&mut self, id: &str) {
+        if self.recording.as_deref() != Some(id) {
+            self.stop_recording();
+        }
+        if self.alias_for.as_deref() != Some(id) {
+            self.end_alias(false);
+        }
+        self.selected = Some(id.to_string());
+    }
+
+    fn step_row(&mut self, delta: i32, tx: &mut Tx) {
+        if self.shown.is_empty() {
+            return;
+        }
+        let at = self.selected.as_ref().and_then(|id| self.shown.iter().position(|&i| &self.commands[i].id == id));
+        let next = match at {
+            Some(at) => (at as i32 + delta).clamp(0, self.shown.len() as i32 - 1) as usize,
+            None => if delta > 0 { 0 } else { self.shown.len() - 1 },
+        };
+        let id = self.commands[self.shown[next]].id.clone();
+        self.select(&id);
+        tx.scroll_into_view(row_key(&id));
     }
 
     /// Hands the palette the aliases and hotkeys as they now stand; `rebind` has it register
@@ -287,6 +368,16 @@ impl SettingsUi {
         self.alias_for.is_some() && self.alias.focused
     }
 
+    fn begin_alias(&mut self, id: &str) {
+        self.stop_recording();
+        self.select(id);
+        self.alias_before = self.bindings.aliases.get(id).cloned().unwrap_or_default();
+        self.alias.replace_text(self.alias_before.clone());
+        self.alias_for = Some(id.to_string());
+        self.alias.focused = true;
+        self.filter.focused = false;
+    }
+
     /// The alias field changed: it is the row's alias from this keystroke on.
     fn alias_changed(&mut self) {
         let Some(id) = self.alias_for.clone() else { return };
@@ -302,6 +393,21 @@ impl SettingsUi {
             self.bindings.set_alias(&id, &self.alias_before.clone());
             self.push_bindings(false);
         }
+    }
+
+    /// Starts listening for a row's hotkey. The palette lets go of every hotkey meanwhile, so
+    /// pressing one that is taken reaches this window instead of running its command.
+    fn begin_record(&mut self, id: &str, tx: &mut Tx) {
+        self.select(id);
+        self.end_alias(false);
+        self.filter.focused = false;
+        tx.blur();
+        if self.recording.is_none() {
+            tell_main(|app| app.bindings.suspend());
+        }
+        self.recording = Some(id.to_string());
+        self.held = Mods::default();
+        self.record_error.clear();
     }
 
     /// Stops listening without a change, and has the palette take its hotkeys back.
@@ -342,6 +448,14 @@ impl SettingsUi {
                     self.set_hotkey(&id, &chord);
                 }
             }
+        }
+    }
+
+    /// Return in the search: record the selected row's hotkey, or the only row's.
+    fn record_selected(&mut self, tx: &mut Tx) {
+        let id = self.selected.clone().or_else(|| (self.shown.len() == 1).then(|| self.commands[self.shown[0]].id.clone()));
+        if let Some(id) = id {
+            self.begin_record(&id, tx);
         }
     }
 
