@@ -216,6 +216,20 @@ build (the row's subtitle updated within a minute). Not verified: `setWindowBoun
 Verified: export contents (no keys); restore into a sandbox, key preserved, safety backup
 written, a non-backup file refused.
 
+## 9b. File search scope (`src/features/files.rs`)
+
+- [x] Search Files covers the home folder and every mounted drive (read from
+      `/proc/self/mountinfo`; the system's own mounts are skipped), not the home folder alone
+- [x] Settings → File Search: a switch per mounted drive, a list of excluded folders (typed,
+      with `~`), and "Find hidden files"; kept in `settings.json` under `files`
+- [x] "Exclude Folder from Search" (Ctrl+Shift+X) on a result, as Raycast's Exclude from Index
+- [ ] A folder chooser for Excluded Folders (today the path is typed or pasted)
+- [ ] EchoFiles' index as the engine when `ef` is installed (today always `fd`, or `find`)
+
+Verified: mount parsing, typed paths and the scope (unit tests); fd's anchored `--exclude` on a
+scratch tree; a folder on `/media/data106` found, and the Settings pane, in headless snapshots.
+Not verified: adding and removing a folder, a drive's switch and Ctrl+Shift+X in the real app.
+
 ## 10. Housekeeping
 
 - [x] Unit tests for `AiSettings::normalize` (old settings files keep their key) and provider
