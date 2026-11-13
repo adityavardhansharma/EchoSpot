@@ -610,10 +610,16 @@ fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
 
 /// The surface every EchoSpot window stands on: a rounded panel inset in its window by
 /// `WINDOW_MARGIN` (room for the shadow), filled with the screen behind it, blurred, under the
-/// scrim. `backdrop` is that capture when there is one; `mode` is the Surface setting.
-pub fn panel_surface(key: &str, p: &Palette, (w, h): (f32, f32), backdrop: Option<&rune::Pixels>, mode: &str) -> El {
+/// scrim. `backdrop` is that capture when there is one; `mode` is the Surface setting. `liquid`
+/// is the Liquid theme with its glass ready: the panel is left clear for the lens beneath.
+pub fn panel_surface(key: &str, p: &Palette, (w, h): (f32, f32), backdrop: Option<&rune::Pixels>, mode: &str, liquid: bool) -> El {
     let panel = el().key(key.to_string()).absolute(size::WINDOW_MARGIN, size::WINDOW_MARGIN).size(w, h)
-        .radius(radius::PANEL).clip_rounded(radius::PANEL)
+        .radius(radius::PANEL).clip_rounded(radius::PANEL);
+    // Liquid: the compositor has drawn the glass, with its own rim and shadow, under the window.
+    if liquid {
+        return panel;
+    }
+    let panel = panel
         .shadow(16.0, 48.0, Color::BLACK.alpha(if p.dark { 0.42 } else { 0.24 }))
         .box_shadow(rune::Shadow::core_animation(0.0, 0.0, 0.5, Color::BLACK.alpha(0.55)));
     match (backdrop, mode) {
@@ -648,7 +654,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         (None, Layout::Split) => split_body(s, &p, scale, screen),
         (None, Layout::Grid { columns }) => grid_body(s, &p, scale, screen, columns),
     };
-    let mut panel = panel_surface("panel", &p, (size::PANEL_W, size::PANEL_H), s.has_backdrop.then_some(&s.backdrop), &s.settings.backdrop);
+    s.system_dark.set(env.system_dark);
+    let liquid = s.settings.liquid() && s.glass.ready();
+    let mut panel = panel_surface("panel", &p, (size::PANEL_W, size::PANEL_H), s.has_backdrop.then_some(&s.backdrop), &s.settings.backdrop, liquid);
     panel = panel.child(body).child(header(s, &p, screen)).child(bottom_bar(s, &p, screen));
     if let Some(menu) = &s.menu {
         panel = panel.child(menu_view(s, &p, menu));
@@ -656,7 +664,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if let Some(dialog) = &s.dialog {
         panel = panel.child(dialog_view(s, &p, dialog));
     }
-    panel = panel.child(panel_rim(&p));
+    if !liquid {
+        panel = panel.child(panel_rim(&p));
+    }
     // The window is larger than the panel so the shadow has room; a press out there dismisses.
     el().w_full().h_full()
         .child(el().key("outside").pin(FULL, FULL, FULL, FULL).hit().on_press_tx(|s: &mut App, tx| s.hide(tx)))
