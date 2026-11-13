@@ -88,14 +88,24 @@ fn drives(mountinfo: &str, home: &Path) -> Vec<PathBuf> {
     out
 }
 
+/// Everywhere a search looks: the home folder, then every mounted drive.
+fn roots() -> Vec<String> {
+    let home = util::home();
+    let mounted = std::fs::read_to_string("/proc/self/mountinfo").map(|m| drives(&m, &home)).unwrap_or_default();
+    std::iter::once(home).chain(mounted).map(|p| p.display().to_string()).collect()
+}
+
 fn search(query: &str) -> Vec<PathBuf> {
-    let home = util::home().display().to_string();
+    let roots = roots();
     let mut hits = if util::has_program("fd") {
         // Smart case, every term somewhere in the path's name, hidden and ignored files left out.
         let pattern = query.split_whitespace().map(regex_escape).collect::<Vec<_>>().join(".*");
-        run_lines("fd", &["--max-results", "120", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", &pattern, &home])
+        let mut args = vec!["--max-results", "120", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", &pattern];
+        args.extend(roots.iter().map(String::as_str));
+        run_lines("fd", &args)
     } else {
-        let script = format!("find {} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 120", util::quote(&home), util::quote(&format!("*{query}*")));
+        let places = roots.iter().map(|r| util::quote(r)).collect::<Vec<_>>().join(" ");
+        let script = format!("find {places} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 120", util::quote(&format!("*{query}*")));
         util::sh_output(&script).map(|o| o.lines().map(PathBuf::from).collect()).unwrap_or_default()
     };
     // Shallow paths and exact names first: the file someone means is rarely the deepest one.
