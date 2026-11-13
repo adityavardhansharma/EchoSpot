@@ -187,7 +187,7 @@ fn entries(app: &App) -> Vec<Entry> {
         if let Some(chord) = app.bindings.hotkeys.get(&id) {
             e.item.accessories.push(Accessory { icon: Some(&icons::KEYBOARD), text: keycaps(chord).join(" "), tag: None });
         }
-        e.item.actions.push(Action::new("Set Alias or Hotkey…", &icons::KEYBOARD, Act::Binding(id, e.item.title.clone())).keys("ctrl+shift+k").section(""));
+        e.item.actions.push(Action::new("Configure Alias and Hotkey…", &icons::KEYBOARD, Act::Binding(id)).keys("ctrl+shift+k").section(""));
     }
     out
 }

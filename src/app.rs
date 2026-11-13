@@ -701,7 +701,10 @@ impl App {
             Act::Calendar(op) => features::calendar::perform(self, op, tx),
             Act::Note(op) => features::notes::perform(self, op, tx),
             Act::Script(op) => features::scripts::perform(self, op, tx),
-            Act::Binding(id, title) => features::bindings::edit(self, &id, &title, tx),
+            Act::Binding(id) => {
+                self.hide(tx);
+                crate::settings_ui::open_command(&id);
+            }
             Act::OpenSettings(pane) => {
                 self.hide(tx);
                 crate::settings_ui::open(&pane);

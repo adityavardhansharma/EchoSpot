@@ -4,6 +4,9 @@
 //! Colour is kept for what means something: the sidebar's tiles, a status dot, and one accent
 //! (the system blue) for whatever is switched on or chosen. Every control writes `settings.json`
 //! at once and tells the palette, so nothing waits for Save.
+//!
+//! The Commands pane is the one table: every launcher row with its alias and its hotkey. An
+//! alias is typed where it shows; a hotkey is recorded by pressing it.
 
 use std::sync::OnceLock;
 
@@ -514,6 +517,19 @@ pub fn on_focus(ui: &mut SettingsUi, focused: bool, _: &mut Tx) {
     if !focused {
         ui.stop_recording();
     }
+}
+
+/// Opens Settings on one launcher row, where its alias and hotkey are set.
+pub fn open_command(id: &str) {
+    let Some((handle, window)) = WINDOW.get() else { return };
+    let id = id.to_string();
+    handle.update(move |ui, _| {
+        ui.reload();
+        ui.capture();
+        ui.reveal = Some(id);
+        ui.show(Pane::Commands);
+    });
+    window.open();
 }
 
 /// Opens Settings at a pane ("ai", "extensions", …).
@@ -1167,7 +1183,7 @@ const SHORTCUTS: [(&str, &[(&str, &str)]); 4] = [
     ]),
     ("Launcher", &[
         ("Ask Quick AI what is typed", "tab"), ("Add to or remove from Favorites", "ctrl+shift+f"), ("Copy the name or answer", "ctrl+shift+c"),
-        ("Open Settings", "ctrl+,"), ("Quit EchoSpot", "ctrl+q"),
+        ("Set the row's alias and hotkey", "ctrl+shift+k"), ("Open Settings", "ctrl+,"), ("Quit EchoSpot", "ctrl+q"),
     ]),
     ("AI", &[
         ("Pick a model", "tab"), ("Paste the answer", "ctrl+enter"), ("Ask again", "ctrl+r"), ("Continue Quick AI as a chat", "ctrl+t"), ("New chat", "ctrl+shift+n"),

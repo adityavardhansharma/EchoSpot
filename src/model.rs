@@ -96,8 +96,8 @@ pub enum Act {
     Confirm(Box<Confirm>),
     Ext(crate::ext::ExtAct),
     Ai(AiOp),
-    /// Edit a launcher row's alias and hotkey: its id and title.
-    Binding(String, String),
+    /// Show a launcher row in Settings, where its alias and hotkey are set: its id.
+    Binding(String),
     Script(ScriptOp),
     Note(NoteOp),
     Calendar(CalOp),

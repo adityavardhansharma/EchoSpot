@@ -1,13 +1,12 @@
 //! Aliases and global hotkeys for launcher rows. An alias typed exactly puts its row first; a
 //! hotkey is a Hyprland binding, registered while EchoSpot runs, that calls `echospot run <id>`.
+//! Both are set in Settings, under Commands: the alias typed in place, the hotkey recorded.
 
 use std::collections::BTreeMap;
 
-use rune::{Key, KeyEvent, Tx};
+use rune::{Key, KeyEvent};
 use serde::{Deserialize, Serialize};
 
-use crate::app::{App, Tone};
-use crate::features::forms::{self, Field, FieldKind, Form, Target};
 use crate::util;
 
 #[derive(Serialize, Deserialize, Default, Clone)]
@@ -62,11 +61,6 @@ pub fn hypr_chord(chord: &str) -> Option<String> {
     }
     let mods: Vec<&str> = ["SUPER", "CTRL", "ALT", "SHIFT"].into_iter().zip(held).filter(|(_, on)| *on).map(|(name, _)| name).collect();
     Some(format!("{} + {}", mods.join(" + "), key?))
-}
-
-/// The chord in the palette's own spelling: `super+alt+c`.
-fn normal(chord: &str) -> String {
-    chord.split('+').map(|p| p.trim().to_ascii_lowercase()).filter(|p| !p.is_empty()).collect::<Vec<_>>().join("+")
 }
 
 /// The chord a key press is, in the palette's own spelling (`super+alt+c`), or `None` for a
@@ -180,49 +174,6 @@ impl Bindings {
             });
         }
     }
-}
-
-fn form(app: &App, id: &str, title: &str) -> Form {
-    Form::new(
-        &format!("Alias and Hotkey: {title}"),
-        "Save",
-        vec![
-            Field::new("alias", "Alias", FieldKind::Text).value(app.bindings.aliases.get(id).map(String::as_str).unwrap_or("")).placeholder("e.g. cb")
-                .info("Typing the alias in the launcher puts this row first."),
-            Field::new("hotkey", "Hotkey", FieldKind::Text).value(app.bindings.hotkeys.get(id).map(String::as_str).unwrap_or("")).placeholder("e.g. super+alt+c")
-                .info("A global shortcut, written as modifiers and a key joined by +. It needs Super, Ctrl or Alt. Leave empty for none."),
-        ],
-        Target::Binding(id.to_string()),
-    )
-}
-
-pub fn edit(app: &mut App, id: &str, title: &str, tx: &mut Tx) {
-    let form = form(app, id, title);
-    forms::open(app, form, tx);
-}
-
-pub fn save(app: &mut App, id: String, tx: &mut Tx) {
-    let Some(form) = &mut app.form else { return };
-    let (alias, hotkey) = (form.get("alias").trim().to_string(), normal(&form.get("hotkey")));
-    if !hotkey.is_empty() {
-        let problem = if hypr_chord(&hotkey).is_none() {
-            Some("Write it like super+alt+c, with Super, Ctrl or Alt.".to_string())
-        } else {
-            app.bindings.hotkeys.iter().find(|(other, chord)| **other != id && **chord == hotkey).map(|_| "Another command already uses this hotkey.".to_string())
-        };
-        if let Some(problem) = problem {
-            if let Some(field) = form.fields.iter_mut().find(|f| f.id == "hotkey") {
-                field.error = problem;
-            }
-            return;
-        }
-    }
-    if alias.is_empty() { app.bindings.aliases.remove(&id); } else { app.bindings.aliases.insert(id.clone(), alias); }
-    if hotkey.is_empty() { app.bindings.hotkeys.remove(&id); } else { app.bindings.hotkeys.insert(id, hotkey); }
-    app.bindings.save();
-    app.bindings.apply();
-    app.pop(tx);
-    app.toast("Saved", Tone::Success);
 }
 
 #[cfg(test)]

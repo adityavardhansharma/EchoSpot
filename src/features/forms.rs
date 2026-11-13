@@ -78,7 +78,6 @@ impl Field {
 pub enum Target {
     Snippet(Option<String>),
     Quicklink(Option<String>),
-    Binding(String),
     /// A script's arguments, asked before it runs.
     Script(String),
     ScriptNew,
@@ -164,7 +163,6 @@ pub fn submit(app: &mut App, tx: &mut Tx) {
     match target {
         Target::Snippet(id) => crate::features::snippets::save(app, id, tx),
         Target::Quicklink(id) => crate::features::quicklinks::save(app, id, tx),
-        Target::Binding(id) => crate::features::bindings::save(app, id, tx),
         Target::Script(id) => crate::features::scripts::submit(app, id, tx),
         Target::Note(id) => crate::features::notes::save(app, id, tx),
         Target::Calendar => crate::features::calendar::save(app, tx),
