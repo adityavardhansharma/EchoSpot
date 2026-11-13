@@ -70,8 +70,6 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "498668b90da9995302a0055aaecad4756932333da2ddef6baee1c00844c430fc"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -754,11 +752,20 @@ checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
 name = "echospot"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.13.2",
  "chrono",
+ "image",
  "rune",
+ "rune-fx",
  "rune-kit",
+ "rustix 1.1.6",
  "serde",
  "serde_json",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols-wlr",
+ "wayland-scanner",
+ "wgpu",
 ]
 
 [[package]]
@@ -2207,8 +2214,6 @@ checksum = "9c4482d912d7671a7cd2089794f90ef3bb5f5f8c738230fb0fcd50fa020f0ed3"
 [[package]]
 name = "parley_engine"
 version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b74c0d373e462e504ad4436710a39f099e18e848e1ee711f70cd2dcd5a69b290"
 dependencies = [
  "fontique",
  "harfrust",
@@ -2630,6 +2635,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-core-graphics",
  "objc2-core-media",
+ "objc2-core-text",
  "objc2-core-video",
  "objc2-foundation 0.2.2",
  "objc2-foundation 0.3.2",
@@ -2639,6 +2645,7 @@ dependencies = [
  "opuscule",
  "parking_lot",
  "parley",
+ "parley_engine",
  "png 0.18.1",
  "pollster",
  "portable-atomic",
@@ -2653,9 +2660,11 @@ dependencies = [
  "serde",
  "serde_json",
  "skrifa",
+ "spellbook",
  "swash",
  "symphonia",
  "taffy",
+ "tiny-skia-path 0.11.4",
  "tokio",
  "unicode-segmentation",
  "wasm-bindgen",
@@ -2671,12 +2680,23 @@ dependencies = [
  "wgpu-hal",
  "wgpu-naga-bridge",
  "windows",
+ "windows-core",
  "windows-sys 0.59.0",
  "winit",
  "x11rb",
  "xkbcommon",
  "zbus 6.2.1",
  "zeroize",
+]
+
+[[package]]
+name = "rune-fx"
+version = "0.0.1"
+dependencies = [
+ "bytemuck",
+ "rune-motion",
+ "rune-staging",
+ "wgpu",
 ]
 
 [[package]]
@@ -2691,6 +2711,7 @@ dependencies = [
 name = "rune-kit"
 version = "0.0.1"
 dependencies = [
+ "icu_normalizer",
  "pulldown-cmark",
  "rune",
  "rune-highlights",
@@ -2996,6 +3017,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "spellbook"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d204abcbdf8e88729306a8d0ca01a79d8a49969fe1f84696909d6dbc4321c1a"
+dependencies = [
+ "foldhash 0.2.0",
+ "hashbrown 0.17.1",
+]
+
+[[package]]
 name = "spirv"
 version = "0.4.0+sdk-1.4.341.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3263,7 +3294,16 @@ dependencies = [
  "cfg-if",
  "log",
  "png 0.17.16",
- "tiny-skia-path",
+ "tiny-skia-path 0.11.4 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "tiny-skia-path"
+version = "0.11.4"
+dependencies = [
+ "arrayref",
+ "bytemuck",
+ "strict-num",
 ]
 
 [[package]]
@@ -3440,7 +3480,7 @@ dependencies = [
  "siphasher",
  "strict-num",
  "svgtypes",
- "tiny-skia-path",
+ "tiny-skia-path 0.11.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "xmlwriter",
 ]
 
@@ -3785,8 +3825,6 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "30.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -4068,8 +4106,6 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 [[package]]
 name = "winit"
 version = "0.30.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
 dependencies = [
  "ahash",
  "android-activity",
