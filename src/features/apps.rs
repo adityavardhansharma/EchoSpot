@@ -12,6 +12,8 @@ pub struct AppEntry {
     pub generic: String,
     pub keywords: String,
     pub exec: String,
+    /// `Path=`: the directory the app expects to start in, or empty.
+    pub dir: String,
     pub terminal: bool,
     /// The window class the app's windows report, for the running dot.
     pub wm_class: String,
@@ -79,6 +81,7 @@ fn parse(path: &Path, id: String, locales: &[String]) -> Option<AppEntry> {
         generic: localized("GenericName").unwrap_or("").to_string(),
         keywords: format!("{} {}", localized("Keywords").unwrap_or("").replace(';', " "), fields.get("Categories").unwrap_or(&"").replace(';', " ")),
         exec,
+        dir: fields.get("Path").unwrap_or(&"").to_string(),
         terminal: flag("Terminal"),
         wm_class,
         icon_name: fields.get("Icon").unwrap_or(&"").to_string(),
@@ -107,7 +110,7 @@ fn collect(dir: &Path, base: &Path, locales: &[String], seen: &mut HashMap<Strin
                 None => {
                     seen.insert(id.clone(), AppEntry {
                         id, path, name: String::new(), generic: String::new(), keywords: String::new(),
-                        exec: String::new(), terminal: false, wm_class: String::new(), icon_name: String::new(), icon: None,
+                        exec: String::new(), dir: String::new(), terminal: false, wm_class: String::new(), icon_name: String::new(), icon: None,
                     });
                 }
             }
