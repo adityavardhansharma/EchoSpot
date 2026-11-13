@@ -197,6 +197,7 @@ impl SettingsUi {
             self.set_backdrop(w, h, rgba);
         }
         crate::live::start_settings();
+        crate::live::own_shadows_off();
     }
 
     /// A picture of the screen behind the panel, for Blur and for Liquid alike.

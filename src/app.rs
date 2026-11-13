@@ -356,6 +356,7 @@ impl App {
     /// Called as the palette is summoned: note what it covers, then show fresh rows.
     pub fn will_show(&mut self) {
         self.prev_window = windows::active();
+        crate::live::own_shadows_off();
         self.has_backdrop = false;
         self.glass.clear();
         if self.settings.liquid() || self.settings.backdrop == "capture" {

@@ -100,15 +100,50 @@ struct Monitor {
     special_workspace: WorkspaceRef,
 }
 
-/// One JSON read on Hyprland's command socket: no `hyprctl` process per frame.
-fn hypr<T: for<'de> Deserialize<'de>>(what: &str) -> Option<T> {
+/// One request on Hyprland's command socket, its reply as text: no `hyprctl` process per frame.
+fn request(command: &str) -> Option<String> {
     let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok()?;
     let mut s = UnixStream::connect(crate::util::runtime_dir().join("hypr").join(sig).join(".socket.sock")).ok()?;
     s.set_read_timeout(Some(Duration::from_secs(2))).ok();
-    s.write_all(format!("j/{what}").as_bytes()).ok()?;
+    s.write_all(command.as_bytes()).ok()?;
     let mut out = String::new();
     s.read_to_string(&mut out).ok()?;
-    serde_json::from_str(&out).ok()
+    Some(out)
+}
+
+fn hypr<T: for<'de> Deserialize<'de>>(what: &str) -> Option<T> {
+    serde_json::from_str(&request(&format!("j/{what}"))?).ok()
+}
+
+/// EchoSpot's windows are a panel inside a clear margin, where the panel's own shadow falls. A
+/// shadow from Hyprland is drawn around the whole window instead, as a rectangle standing off
+/// the panel. The window rules ask for none, but a rule added later wins: Omarchy's floating
+/// workspaces turn shadows back on for every window on them. A property set on the window itself
+/// outranks any rule, so each window EchoSpot opens is told so as it appears.
+pub fn own_shadows_off() {
+    static WATCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static DONE: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    // One watcher at a time; a window summoned while it runs is seen by it.
+    if WATCHING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let _ = std::thread::Builder::new().name("echospot-shadow".into()).spawn(|| {
+        let pid = std::process::id() as i64;
+        let until = Instant::now() + APPEAR;
+        while Instant::now() < until {
+            let clients: Vec<Client> = hypr("clients").unwrap_or_default();
+            let mut done = DONE.lock().unwrap();
+            done.retain(|address| clients.iter().any(|c| &c.address == address));
+            for c in clients.iter().filter(|c| c.pid == pid) {
+                if !done.contains(&c.address) && request(&format!("/dispatch hl.dsp.window.set_prop({{ window = \"address:{}\", prop = \"no_shadow\", value = \"1\" }})", c.address)).is_some() {
+                    done.push(c.address.clone());
+                }
+            }
+            drop(done);
+            std::thread::sleep(Duration::from_millis(8));
+        }
+        WATCHING.store(false, std::sync::atomic::Ordering::SeqCst);
+    });
 }
 
 // ---- The handle a window holds -----------------------------------------------------------
