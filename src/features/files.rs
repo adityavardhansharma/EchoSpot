@@ -100,12 +100,12 @@ fn search(query: &str) -> Vec<PathBuf> {
     let mut hits = if util::has_program("fd") {
         // Smart case, every term somewhere in the path's name, hidden and ignored files left out.
         let pattern = query.split_whitespace().map(regex_escape).collect::<Vec<_>>().join(".*");
-        let mut args = vec!["--max-results", "120", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", &pattern];
+        let mut args = vec!["--max-results", "200", "--absolute-path", "--exclude", "node_modules", "--exclude", "target", "--exclude", ".cache", "--exclude", ".Trash-*", "--exclude", "lost+found", &pattern];
         args.extend(roots.iter().map(String::as_str));
         run_lines("fd", &args)
     } else {
         let places = roots.iter().map(|r| util::quote(r)).collect::<Vec<_>>().join(" ");
-        let script = format!("find {places} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 120", util::quote(&format!("*{query}*")));
+        let script = format!("find {places} -maxdepth 6 -not -path '*/.*' -iname {} 2>/dev/null | head -n 200", util::quote(&format!("*{query}*")));
         util::sh_output(&script).map(|o| o.lines().map(PathBuf::from).collect()).unwrap_or_default()
     };
     // Shallow paths and exact names first: the file someone means is rarely the deepest one.
