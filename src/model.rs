@@ -370,6 +370,10 @@ pub fn keycaps(keys: &str) -> Vec<String> {
         "left" => "←".to_string(),
         "right" => "→".to_string(),
         "space" => "Space".to_string(),
+        "page_up" => "PgUp".to_string(),
+        "page_down" => "PgDn".to_string(),
+        "home" => "Home".to_string(),
+        "end" => "End".to_string(),
         other => other.to_uppercase(),
     }).collect()
 }
