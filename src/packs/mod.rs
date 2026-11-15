@@ -51,3 +51,4 @@ pub mod cache;
 pub mod runtime;
 #[cfg(test)]
 pub mod tests;
+pub mod secrets;
