@@ -52,3 +52,5 @@ pub mod runtime;
 #[cfg(test)]
 pub mod tests;
 pub mod secrets;
+pub mod blocks;
+pub mod faces;
