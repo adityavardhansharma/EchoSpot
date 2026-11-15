@@ -373,7 +373,7 @@ fn is_url(source: &str) -> bool {
 }
 
 /// A feed's text: a local file as it is, a URL from its cache unless that has gone stale.
-fn read(source: &str, force: bool) -> Result<String, String> {
+pub fn read(source: &str, force: bool) -> Result<String, String> {
     if !is_url(source) {
         let path = if let Some(rest) = source.strip_prefix("~/") { util::home().join(rest) } else { PathBuf::from(source) };
         return std::fs::read_to_string(&path).map_err(|_| format!("Could not read {}", util::tilde(&path)));
@@ -394,7 +394,7 @@ fn read(source: &str, force: bool) -> Result<String, String> {
     }
 }
 
-fn window() -> (i64, i64) {
+pub fn window() -> (i64, i64) {
     let today = Local::now().date_naive().and_time(NaiveTime::MIN);
     let from = Local.from_local_datetime(&today).earliest().map(|t| t.timestamp()).unwrap_or_else(|| util::now_secs() as i64);
     (from, from + (DAYS_AHEAD + 1) * 86_400)

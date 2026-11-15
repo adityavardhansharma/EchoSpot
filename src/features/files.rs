@@ -146,7 +146,7 @@ fn glob_escape(s: &str) -> String {
     s.chars().flat_map(|c| if "\\*?[]{}!".contains(c) { vec!['\\', c] } else { vec![c] }).collect()
 }
 
-fn search(query: &str, settings: &crate::settings::FileSearch) -> Vec<PathBuf> {
+pub fn search(query: &str, settings: &crate::settings::FileSearch) -> Vec<PathBuf> {
     let home = util::home();
     let scope = Scope::new(&home, mounted_drives(), settings);
     let mut hits = if util::has_program("fd") {

@@ -12,6 +12,9 @@ use super::manifest::Permissions;
 use super::types::Type;
 
 mod calc;
+mod clipboard;
+mod desk;
+mod notes;
 mod system;
 
 /// What a pack needs before it may call a built-in.
@@ -169,6 +172,9 @@ fn num(input: &Value, key: &str) -> Option<f64> {
 pub fn all() -> Vec<Spec> {
     let mut out = Vec::new();
     calc::register(&mut out);
+    clipboard::register(&mut out);
+    notes::register(&mut out);
+    desk::register(&mut out);
     system::register(&mut out);
     out
 }
