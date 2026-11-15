@@ -29,7 +29,7 @@ pub fn dir() -> PathBuf {
     dir
 }
 
-fn file(id: &str) -> PathBuf {
+pub fn file(id: &str) -> PathBuf {
     dir().join(format!("{id}.md"))
 }
 
@@ -59,7 +59,7 @@ pub fn load() -> Vec<Note> {
 }
 
 /// A file name for a title, not already taken.
-fn slug(title: &str, taken: &[Note]) -> String {
+pub fn slug(title: &str, taken: &[Note]) -> String {
     let base: String = title.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '-' }).collect::<String>()
         .split('-').filter(|p| !p.is_empty()).collect::<Vec<_>>().join("-").chars().take(60).collect();
     let base = if base.is_empty() { "note".to_string() } else { base };
