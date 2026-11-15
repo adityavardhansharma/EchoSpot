@@ -1037,11 +1037,27 @@ fn register_link_handler() {
     if std::fs::read_to_string(&file).ok().as_deref() != Some(entry.as_str()) {
         let _ = std::fs::write(&file, entry);
     }
+    // `xdg-mime query default` answers from the entry's own MimeType line, so it says yes before
+    // anything is recorded. Browsers ask through the desktop portal, which reads only the two
+    // files below, and offers a software store when neither names a handler.
+    let config = std::env::var("XDG_CONFIG_HOME").map(std::path::PathBuf::from).unwrap_or_else(|_| util::home().join(".config"));
+    let defaults = std::fs::read_to_string(config.join("mimeapps.list")).unwrap_or_default();
     for scheme in ["x-scheme-handler/raycast", "x-scheme-handler/com.raycast"] {
-        if util::output("xdg-mime", &["query", "default", scheme]).as_deref() != Some(LINK_HANDLER) {
+        if !names_handler(&defaults, scheme) {
             let _ = util::output("xdg-mime", &["default", LINK_HANDLER, scheme]);
         }
     }
+    let cache = std::fs::read_to_string(apps.join("mimeinfo.cache")).unwrap_or_default();
+    if !names_handler(&cache, "x-scheme-handler/raycast") {
+        let _ = util::output("update-desktop-database", &[&apps.display().to_string()]);
+    }
+}
+
+/// Whether a `mimeapps.list` or `mimeinfo.cache` gives the link handler for a scheme.
+fn names_handler(list: &str, scheme: &str) -> bool {
+    list.lines().any(|line| {
+        line.split_once('=').is_some_and(|(key, apps)| key.trim() == scheme && apps.split(';').any(|app| app.trim() == LINK_HANDLER))
+    })
 }
 
 fn percent_decode(text: &str) -> String {
@@ -1206,5 +1222,9 @@ mod tests {
         assert_eq!(oauth_link("com.raycast:/oauth?package_name=Extension&error=access_denied").unwrap()["error"], "access_denied");
         assert!(oauth_link("raycast://extensions/raycast/github/my-issues").is_none());
         assert!(oauth_link("https://example.com/oauth?code=1").is_none());
+        assert!(names_handler("[Default Applications]\nx-scheme-handler/raycast=echospot-url.desktop\n", "x-scheme-handler/raycast"));
+        assert!(names_handler("x-scheme-handler/raycast=other.desktop;echospot-url.desktop;\n", "x-scheme-handler/raycast"));
+        assert!(!names_handler("x-scheme-handler/com.raycast=echospot-url.desktop\n", "x-scheme-handler/raycast"));
+        assert!(!names_handler("x-scheme-handler/raycast=other.desktop\n", "x-scheme-handler/raycast"));
     }
 }
