@@ -47,3 +47,7 @@ pub mod stores;
 pub mod builtins;
 pub mod shared;
 pub mod vm;
+pub mod cache;
+pub mod runtime;
+#[cfg(test)]
+pub mod tests;

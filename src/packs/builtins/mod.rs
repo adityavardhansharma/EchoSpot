@@ -178,6 +178,15 @@ pub fn find(address: &str) -> Option<Spec> {
     all().into_iter().find(|s| s.address == address)
 }
 
+/// Built-ins made from what the user already has: scripts, snippets, quicklinks, AI presets.
+pub fn dynamic() -> Vec<Spec> {
+    Vec::new()
+}
+
+pub fn find_dynamic(address: &str) -> Option<Spec> {
+    dynamic().into_iter().find(|s| s.address == address)
+}
+
 /// Whether `address` is in a reserved pack: one a pack may never define.
 pub fn reserved(address: &str) -> bool {
     address.split('.').next().is_some_and(|ns| super::manifest::RESERVED.contains(&ns))
