@@ -86,10 +86,17 @@ impl PackError {
     /// A Luau error message, with its `file:line:` lifted into `at`.
     pub fn luau(message: &str) -> Self {
         let first = message.lines().next().unwrap_or(message);
+        let first = first.strip_prefix("runtime error: ").unwrap_or(first);
         // An error raised by the host carries a whole PackError as JSON.
         if let Some(at) = message.find("{\"code\":\"E")
             && let Some(v) = message[at..].lines().next().and_then(|l| serde_json::from_str::<Value>(l).ok()) {
-            return Self::from_json(&v);
+            let mut e = Self::from_json(&v);
+            // Where the pack's own code was when the host raised it.
+            let lead = message[..at].trim().trim_end_matches(':');
+            if e.at.is_empty() && let Some((file, line)) = lead.rsplit_once(':') && line.trim().parse::<u32>().is_ok() {
+                e.at = format!("{}:{}", file.rsplit(' ').next().unwrap_or(file).trim_start_matches(['@', '=']), line.trim());
+            }
+            return e;
         }
         let code = if first.contains("time limit") || first.contains("timed out") || first.contains("interrupted") { "E0204" } else { "E0203" };
         let mut parts = first.splitn(3, ':');

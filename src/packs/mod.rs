@@ -45,3 +45,5 @@ pub mod looks;
 pub mod triggers;
 pub mod stores;
 pub mod builtins;
+pub mod shared;
+pub mod vm;
