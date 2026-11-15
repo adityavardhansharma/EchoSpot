@@ -53,6 +53,16 @@ export function createApi(ctx) {
     const child = execFile(program, args, { maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => (error ? reject(error) : resolve(stdout)));
     if (input !== undefined) child.stdin.end(input);
   }));
+  // For a program that is given input and answers nothing. `wl-copy` leaves a child behind
+  // holding the clipboard; waiting on its output, as `run` does, would wait for as long as
+  // the clipboard keeps that text.
+  const feed = (program, args, input) => track(new Promise((resolve, reject) => {
+    const child = spawn(program, args, { stdio: ["pipe", "ignore", "ignore"] });
+    child.on("error", reject);
+    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${program} exited with ${code}`))));
+    child.stdin.on("error", () => {});
+    child.stdin.end(input ?? "");
+  }));
   const detached = (program, args) => {
     const child = spawn(program, args, { detached: true, stdio: "ignore" });
     child.on("error", () => {});
@@ -105,40 +115,50 @@ export function createApi(ctx) {
     constructor(options = {}) {
       this.file = path.join(supportPath, `cache-${options.namespace || "default"}.json`);
       this.subscribers = new Set();
+      // Extensions hand these methods around on their own (`useSyncExternalStore(cache.subscribe, …)`).
+      for (const method of ["get", "has", "set", "remove", "clear", "subscribe"]) this[method] = this[method].bind(this);
       try {
         this.data = JSON.parse(fs.readFileSync(this.file, "utf8"));
       } catch {
         this.data = {};
       }
+      if (!this.data || typeof this.data !== "object" || Array.isArray(this.data)) this.data = {};
     }
     get isEmpty() {
       return Object.keys(this.data).length === 0;
     }
     get(key) {
-      return this.data[key];
+      return this.has(key) ? this.data[key] : undefined;
     }
     has(key) {
-      return key in this.data;
+      return Object.prototype.hasOwnProperty.call(this.data, String(key));
     }
-    #save(key, value) {
+    #save(key, value, tell = true) {
       try {
         fs.writeFileSync(this.file, JSON.stringify(this.data));
       } catch {}
-      for (const subscriber of this.subscribers) subscriber(key, value);
+      if (!tell) return;
+      for (const subscriber of [...this.subscribers]) {
+        try {
+          subscriber(key, value);
+        } catch {
+          // A subscriber that throws must not undo the write that called it.
+        }
+      }
     }
     set(key, value) {
-      this.data[key] = value;
-      this.#save(key, value);
+      this.data[String(key)] = String(value);
+      this.#save(String(key), String(value));
     }
     remove(key) {
-      const had = key in this.data;
-      delete this.data[key];
-      this.#save(key, undefined);
+      const had = this.has(key);
+      delete this.data[String(key)];
+      if (had) this.#save(String(key), undefined);
       return had;
     }
-    clear() {
+    clear(options = {}) {
       this.data = {};
-      this.#save(undefined, undefined);
+      this.#save(undefined, undefined, options.notifySubscribers !== false);
     }
     subscribe(subscriber) {
       this.subscribers.add(subscriber);
@@ -155,10 +175,10 @@ export function createApi(ctx) {
   const Clipboard = {
     copy: async (content, options) => {
       if (content && typeof content === "object" && content.file) {
-        await run("wl-copy", ["--type", "text/uri-list"], `file://${content.file}\n`);
+        await feed("wl-copy", ["--type", "text/uri-list"], `file://${content.file}\n`);
       } else {
         const args = options?.concealed ? ["--sensitive"] : [];
-        await run("wl-copy", args, contentText(content)).catch(() => run("wl-copy", [], contentText(content)));
+        await feed("wl-copy", args, contentText(content)).catch(() => feed("wl-copy", [], contentText(content)));
       }
     },
     paste: async (content) => {
@@ -166,7 +186,7 @@ export function createApi(ctx) {
       notify("paste", []);
     },
     clear: async () => {
-      await run("wl-copy", ["--clear"]);
+      await feed("wl-copy", ["--clear"]);
     },
     readText: async () => {
       try {
@@ -206,8 +226,14 @@ export function createApi(ctx) {
       this.options.style = value;
       this.show();
     }
+    get primaryAction() {
+      return this.options.primaryAction;
+    }
     set primaryAction(value) {
       this.options.primaryAction = value;
+    }
+    get secondaryAction() {
+      return this.options.secondaryAction;
     }
     set secondaryAction(value) {
       this.options.secondaryAction = value;
@@ -250,8 +276,10 @@ export function createApi(ctx) {
   const redirectFor = (method) => {
     if (method === "app") return "raycast://oauth?package_name=Extension";
     if (method === "appURI") return "com.raycast:/oauth?package_name=Extension";
+    if (method === "clientIdMetadataDocument") return "com.raycast:/oauth";
     return "https://raycast.com/redirect?packageName=Extension";
   };
+  const clientIdMetadataDocument = "https://www.raycast.com/.well-known/oauth-client-metadata/raycast.json";
   class TokenSet {
     constructor(data) {
       this.accessToken = data.accessToken;
@@ -289,7 +317,7 @@ export function createApi(ctx) {
           const url = new URL(options.endpoint);
           const set = (key, value) => value != null && url.searchParams.set(key, String(value));
           set("response_type", "code");
-          set("client_id", options.clientId);
+          set("client_id", options.clientId ?? (this.redirectMethod === "clientIdMetadataDocument" ? clientIdMetadataDocument : undefined));
           set("redirect_uri", redirectURI);
           set("scope", options.scope);
           set("state", state);
@@ -322,7 +350,7 @@ export function createApi(ctx) {
         refreshToken: tokens.refreshToken ?? tokens.refresh_token,
         idToken: tokens.idToken ?? tokens.id_token,
         expiresIn: tokens.expiresIn ?? tokens.expires_in,
-        scope: tokens.scope,
+        scope: Array.isArray(tokens.scope) ? tokens.scope.join(" ") : tokens.scope,
         updatedAt: Date.now(),
       };
       fs.writeFileSync(this.tokensPath, JSON.stringify(data), { mode: 0o600 });
@@ -437,6 +465,8 @@ export function createApi(ctx) {
   Action.CreateSnippet = typed("Unsupported");
   Action.CreateQuicklink = typed("Unsupported");
   Action.PickDate = typed("Unsupported");
+  Action.PickDate.Type = enums.DatePickerType;
+  Action.InstallMCPServer = typed("Unsupported");
   Action.Push = (props) => {
     const navigation = useNavigation();
     const { target, onPush, onPop, ...rest } = props;
@@ -453,6 +483,7 @@ export function createApi(ctx) {
   const ActionPanel = host("ActionPanel");
   ActionPanel.Section = host("ActionPanel.Section");
   ActionPanel.Submenu = host("ActionPanel.Submenu");
+  ActionPanel.Item = Action;
 
   const Dropdown = (prefix) => {
     const Component = host(`${prefix}.Dropdown`);
@@ -471,7 +502,23 @@ export function createApi(ctx) {
     return Metadata;
   };
 
-  const List = host("List", { actions: "single", searchBarAccessory: "single" });
+  const searchable = (Inner) => {
+    const Component = (props) => {
+      const latest = React.useRef();
+      const timer = React.useRef();
+      latest.current = props.onSearchTextChange;
+      React.useEffect(() => () => clearTimeout(timer.current), []);
+      const delayed = React.useCallback((text) => {
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => latest.current?.(text), 300);
+      }, []);
+      if (!props.throttle || !props.onSearchTextChange) return h(Inner, props);
+      return h(Inner, { ...props, onSearchTextChange: delayed });
+    };
+    Component.displayName = Inner.displayName;
+    return Component;
+  };
+  const List = searchable(host("List", { actions: "single", searchBarAccessory: "single" }));
   List.Item = host("List.Item", { actions: "single", detail: "single" });
   List.Item.Detail = host("List.Item.Detail", { metadata: "single" });
   List.Item.Detail.Metadata = metadata("List.Item.Detail");
@@ -479,7 +526,7 @@ export function createApi(ctx) {
   List.EmptyView = host("EmptyView", { actions: "single" });
   List.Dropdown = Dropdown("List");
 
-  const Grid = host("Grid", { actions: "single", searchBarAccessory: "single" });
+  const Grid = searchable(host("Grid", { actions: "single", searchBarAccessory: "single" }));
   Grid.Item = host("Grid.Item", { actions: "single" });
   Grid.Section = host("Grid.Section");
   Grid.EmptyView = host("EmptyView", { actions: "single" });
@@ -500,6 +547,9 @@ export function createApi(ctx) {
   Form.TagPicker.Item = host("Dropdown.Item");
   Form.LinkAccessory = host("Form.LinkAccessory");
   Form.DatePicker.Type = enums.DatePickerType;
+  Form.DropdownItem = Form.Dropdown.Item;
+  Form.DropdownSection = Form.Dropdown.Section;
+  Form.TagPickerItem = Form.TagPicker.Item;
 
   // There is no menu bar to sit in: the menu renders as a tree, and EchoSpot lists it.
   const MenuBarExtra = host("MenuBarExtra");
@@ -610,7 +660,7 @@ export function createApi(ctx) {
     LaunchType: enums.LaunchType, PopToRootType: enums.PopToRootType,
     Toast, Alert, Clipboard, LocalStorage, Cache, environment,
     showToast, showHUD, confirmAlert, open, showInFinder, trash,
-    useNavigation,
+    useNavigation, Navigation: { useNavigation },
     getPreferenceValues: preferences,
     openExtensionPreferences: async () => notify("openPreferences", [extensionName, null]),
     openCommandPreferences: async () => notify("openPreferences", [extensionName, command.name]),
@@ -621,16 +671,34 @@ export function createApi(ctx) {
     updateCommandMetadata: async (metadata) => notify("commandMetadata", [{ subtitle: metadata?.subtitle ?? "" }]),
     getApplications, getDefaultApplication, getFrontmostApplication, getSelectedText,
     getSelectedFinderItems: unsupported("getSelectedFinderItems"),
+    getFrontmostBrowserTab: unsupported("getFrontmostBrowserTab"),
     captureException: (error) => console.error(error),
     randomId: () => crypto.randomUUID(),
     AI,
     BrowserExtension: { getContent: unsupported("BrowserExtension"), getTabs: unsupported("BrowserExtension") },
     WindowManagement,
-    OAuth: { ...enums.nestedEnums.OAuth, PKCEClient },
+    OAuth: { ...enums.nestedEnums.OAuth, PKCEClient, clientIdMetadataDocument },
     __settle: async () => {
       while (inFlight.size) await Promise.allSettled([...inFlight]);
     },
   };
+  // Names from before the API was grouped; bundles built years ago still ask for them.
+  Object.assign(api, {
+    copyTextToClipboard: Clipboard.copy, pasteText: Clipboard.paste, clearClipboard: Clipboard.clear,
+    getLocalStorageItem: LocalStorage.getItem, setLocalStorageItem: LocalStorage.setItem,
+    removeLocalStorageItem: LocalStorage.removeItem, allLocalStorageItems: LocalStorage.allItems, clearLocalStorage: LocalStorage.clear,
+    ActionPanelItem: Action, ActionPanelSection: ActionPanel.Section, ActionPanelSubmenu: ActionPanel.Submenu,
+    CopyToClipboardAction: Action.CopyToClipboard, OpenInBrowserAction: Action.OpenInBrowser, OpenAction: Action.Open,
+    PasteAction: Action.Paste, PushAction: Action.Push, ShowInFinderAction: Action.ShowInFinder,
+    SubmitFormAction: Action.SubmitForm, TrashAction: Action.Trash,
+    ImageMask: api.Image?.Mask, ToastStyle: Toast.Style, AlertActionStyle: Alert.ActionStyle,
+    FormTextField: Form.TextField, FormTextArea: Form.TextArea, FormCheckbox: Form.Checkbox, FormDatePicker: Form.DatePicker,
+    FormDropdown: Form.Dropdown, FormDropdownItem: Form.Dropdown.Item, FormDropdownSection: Form.Dropdown.Section,
+    FormSeparator: Form.Separator, FormTagPicker: Form.TagPicker, FormTagPickerItem: Form.TagPicker.Item,
+  });
+  // Bundles compiled by esbuild look for the interop marker before spreading the namespace.
+  api.__esModule = true;
+  api.default = api;
   // Extensions written before a newer API still import names this shim lacks; a missing
   // component should fail where it is used, with its name, not as "undefined is not a function".
   return new Proxy(api, {

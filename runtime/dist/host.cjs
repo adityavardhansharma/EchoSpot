@@ -9892,6 +9892,14 @@ function createApi(ctx) {
     const child = (0, import_node_child_process.execFile)(program, args, { maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => error ? reject(error) : resolve(stdout));
     if (input !== void 0) child.stdin.end(input);
   }));
+  const feed = (program, args, input) => track(new Promise((resolve, reject) => {
+    const child = (0, import_node_child_process.spawn)(program, args, { stdio: ["pipe", "ignore", "ignore"] });
+    child.on("error", reject);
+    child.on("exit", (code) => code === 0 ? resolve() : reject(new Error(`${program} exited with ${code}`)));
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(input ?? "");
+  }));
   const detached = (program, args) => {
     const child = (0, import_node_child_process.spawn)(program, args, { detached: true, stdio: "ignore" });
     child.on("error", () => {
@@ -9941,41 +9949,49 @@ function createApi(ctx) {
     constructor(options = {}) {
       this.file = import_node_path.default.join(supportPath, `cache-${options.namespace || "default"}.json`);
       this.subscribers = /* @__PURE__ */ new Set();
+      for (const method of ["get", "has", "set", "remove", "clear", "subscribe"]) this[method] = this[method].bind(this);
       try {
         this.data = JSON.parse(import_node_fs.default.readFileSync(this.file, "utf8"));
       } catch {
         this.data = {};
       }
+      if (!this.data || typeof this.data !== "object" || Array.isArray(this.data)) this.data = {};
     }
     get isEmpty() {
       return Object.keys(this.data).length === 0;
     }
     get(key2) {
-      return this.data[key2];
+      return this.has(key2) ? this.data[key2] : void 0;
     }
     has(key2) {
-      return key2 in this.data;
+      return Object.prototype.hasOwnProperty.call(this.data, String(key2));
     }
-    #save(key2, value) {
+    #save(key2, value, tell = true) {
       try {
         import_node_fs.default.writeFileSync(this.file, JSON.stringify(this.data));
       } catch {
       }
-      for (const subscriber of this.subscribers) subscriber(key2, value);
+      if (!tell) return;
+      for (const subscriber of [...this.subscribers]) {
+        try {
+          subscriber(key2, value);
+        } catch {
+        }
+      }
     }
     set(key2, value) {
-      this.data[key2] = value;
-      this.#save(key2, value);
+      this.data[String(key2)] = String(value);
+      this.#save(String(key2), String(value));
     }
     remove(key2) {
-      const had = key2 in this.data;
-      delete this.data[key2];
-      this.#save(key2, void 0);
+      const had = this.has(key2);
+      delete this.data[String(key2)];
+      if (had) this.#save(String(key2), void 0);
       return had;
     }
-    clear() {
+    clear(options = {}) {
       this.data = {};
-      this.#save(void 0, void 0);
+      this.#save(void 0, void 0, options.notifySubscribers !== false);
     }
     subscribe(subscriber) {
       this.subscribers.add(subscriber);
@@ -9990,11 +10006,11 @@ function createApi(ctx) {
   const Clipboard = {
     copy: async (content, options) => {
       if (content && typeof content === "object" && content.file) {
-        await run2("wl-copy", ["--type", "text/uri-list"], `file://${content.file}
+        await feed("wl-copy", ["--type", "text/uri-list"], `file://${content.file}
 `);
       } else {
         const args = options?.concealed ? ["--sensitive"] : [];
-        await run2("wl-copy", args, contentText(content)).catch(() => run2("wl-copy", [], contentText(content)));
+        await feed("wl-copy", args, contentText(content)).catch(() => feed("wl-copy", [], contentText(content)));
       }
     },
     paste: async (content) => {
@@ -10002,7 +10018,7 @@ function createApi(ctx) {
       notify2("paste", []);
     },
     clear: async () => {
-      await run2("wl-copy", ["--clear"]);
+      await feed("wl-copy", ["--clear"]);
     },
     readText: async () => {
       try {
@@ -10040,8 +10056,14 @@ function createApi(ctx) {
       this.options.style = value;
       this.show();
     }
+    get primaryAction() {
+      return this.options.primaryAction;
+    }
     set primaryAction(value) {
       this.options.primaryAction = value;
+    }
+    get secondaryAction() {
+      return this.options.secondaryAction;
     }
     set secondaryAction(value) {
       this.options.secondaryAction = value;
@@ -10080,8 +10102,10 @@ function createApi(ctx) {
   const redirectFor = (method) => {
     if (method === "app") return "raycast://oauth?package_name=Extension";
     if (method === "appURI") return "com.raycast:/oauth?package_name=Extension";
+    if (method === "clientIdMetadataDocument") return "com.raycast:/oauth";
     return "https://raycast.com/redirect?packageName=Extension";
   };
+  const clientIdMetadataDocument = "https://www.raycast.com/.well-known/oauth-client-metadata/raycast.json";
   class TokenSet {
     constructor(data) {
       this.accessToken = data.accessToken;
@@ -10120,7 +10144,7 @@ function createApi(ctx) {
           const url = new URL(options.endpoint);
           const set = (key2, value) => value != null && url.searchParams.set(key2, String(value));
           set("response_type", "code");
-          set("client_id", options.clientId);
+          set("client_id", options.clientId ?? (this.redirectMethod === "clientIdMetadataDocument" ? clientIdMetadataDocument : void 0));
           set("redirect_uri", redirectURI);
           set("scope", options.scope);
           set("state", state);
@@ -10155,7 +10179,7 @@ function createApi(ctx) {
         refreshToken: tokens.refreshToken ?? tokens.refresh_token,
         idToken: tokens.idToken ?? tokens.id_token,
         expiresIn: tokens.expiresIn ?? tokens.expires_in,
-        scope: tokens.scope,
+        scope: Array.isArray(tokens.scope) ? tokens.scope.join(" ") : tokens.scope,
         updatedAt: Date.now()
       };
       import_node_fs.default.writeFileSync(this.tokensPath, JSON.stringify(data), { mode: 384 });
@@ -10271,6 +10295,8 @@ function createApi(ctx) {
   Action.CreateSnippet = typed("Unsupported");
   Action.CreateQuicklink = typed("Unsupported");
   Action.PickDate = typed("Unsupported");
+  Action.PickDate.Type = DatePickerType;
+  Action.InstallMCPServer = typed("Unsupported");
   Action.Push = (props) => {
     const navigation = useNavigation();
     const { target, onPush, onPop, ...rest } = props;
@@ -10287,6 +10313,7 @@ function createApi(ctx) {
   const ActionPanel = host("ActionPanel");
   ActionPanel.Section = host("ActionPanel.Section");
   ActionPanel.Submenu = host("ActionPanel.Submenu");
+  ActionPanel.Item = Action;
   const Dropdown = (prefix) => {
     const Component = host(`${prefix}.Dropdown`);
     Component.Item = host("Dropdown.Item");
@@ -10302,14 +10329,30 @@ function createApi(ctx) {
     Metadata.TagList.Item = host("Metadata.TagList.Item");
     return Metadata;
   };
-  const List = host("List", { actions: "single", searchBarAccessory: "single" });
+  const searchable = (Inner) => {
+    const Component = (props) => {
+      const latest = import_react.default.useRef();
+      const timer = import_react.default.useRef();
+      latest.current = props.onSearchTextChange;
+      import_react.default.useEffect(() => () => clearTimeout(timer.current), []);
+      const delayed = import_react.default.useCallback((text) => {
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => latest.current?.(text), 300);
+      }, []);
+      if (!props.throttle || !props.onSearchTextChange) return h(Inner, props);
+      return h(Inner, { ...props, onSearchTextChange: delayed });
+    };
+    Component.displayName = Inner.displayName;
+    return Component;
+  };
+  const List = searchable(host("List", { actions: "single", searchBarAccessory: "single" }));
   List.Item = host("List.Item", { actions: "single", detail: "single" });
   List.Item.Detail = host("List.Item.Detail", { metadata: "single" });
   List.Item.Detail.Metadata = metadata("List.Item.Detail");
   List.Section = host("List.Section");
   List.EmptyView = host("EmptyView", { actions: "single" });
   List.Dropdown = Dropdown("List");
-  const Grid = host("Grid", { actions: "single", searchBarAccessory: "single" });
+  const Grid = searchable(host("Grid", { actions: "single", searchBarAccessory: "single" }));
   Grid.Item = host("Grid.Item", { actions: "single" });
   Grid.Section = host("Grid.Section");
   Grid.EmptyView = host("EmptyView", { actions: "single" });
@@ -10328,6 +10371,9 @@ function createApi(ctx) {
   Form.TagPicker.Item = host("Dropdown.Item");
   Form.LinkAccessory = host("Form.LinkAccessory");
   Form.DatePicker.Type = DatePickerType;
+  Form.DropdownItem = Form.Dropdown.Item;
+  Form.DropdownSection = Form.Dropdown.Section;
+  Form.TagPickerItem = Form.TagPicker.Item;
   const MenuBarExtra = host("MenuBarExtra");
   MenuBarExtra.Item = host("MenuBarExtra.Item");
   MenuBarExtra.Section = host("MenuBarExtra.Section");
@@ -10464,6 +10510,7 @@ function createApi(ctx) {
     showInFinder,
     trash,
     useNavigation,
+    Navigation: { useNavigation },
     getPreferenceValues: preferences,
     openExtensionPreferences: async () => notify2("openPreferences", [extensionName, null]),
     openCommandPreferences: async () => notify2("openPreferences", [extensionName, command2.name]),
@@ -10477,16 +10524,53 @@ function createApi(ctx) {
     getFrontmostApplication,
     getSelectedText,
     getSelectedFinderItems: unsupported("getSelectedFinderItems"),
+    getFrontmostBrowserTab: unsupported("getFrontmostBrowserTab"),
     captureException: (error) => console.error(error),
     randomId: () => import_node_crypto.default.randomUUID(),
     AI,
     BrowserExtension: { getContent: unsupported("BrowserExtension"), getTabs: unsupported("BrowserExtension") },
     WindowManagement,
-    OAuth: { ...nestedEnums.OAuth, PKCEClient },
+    OAuth: { ...nestedEnums.OAuth, PKCEClient, clientIdMetadataDocument },
     __settle: async () => {
       while (inFlight.size) await Promise.allSettled([...inFlight]);
     }
   };
+  Object.assign(api2, {
+    copyTextToClipboard: Clipboard.copy,
+    pasteText: Clipboard.paste,
+    clearClipboard: Clipboard.clear,
+    getLocalStorageItem: LocalStorage.getItem,
+    setLocalStorageItem: LocalStorage.setItem,
+    removeLocalStorageItem: LocalStorage.removeItem,
+    allLocalStorageItems: LocalStorage.allItems,
+    clearLocalStorage: LocalStorage.clear,
+    ActionPanelItem: Action,
+    ActionPanelSection: ActionPanel.Section,
+    ActionPanelSubmenu: ActionPanel.Submenu,
+    CopyToClipboardAction: Action.CopyToClipboard,
+    OpenInBrowserAction: Action.OpenInBrowser,
+    OpenAction: Action.Open,
+    PasteAction: Action.Paste,
+    PushAction: Action.Push,
+    ShowInFinderAction: Action.ShowInFinder,
+    SubmitFormAction: Action.SubmitForm,
+    TrashAction: Action.Trash,
+    ImageMask: api2.Image?.Mask,
+    ToastStyle: Toast.Style,
+    AlertActionStyle: Alert.ActionStyle,
+    FormTextField: Form.TextField,
+    FormTextArea: Form.TextArea,
+    FormCheckbox: Form.Checkbox,
+    FormDatePicker: Form.DatePicker,
+    FormDropdown: Form.Dropdown,
+    FormDropdownItem: Form.Dropdown.Item,
+    FormDropdownSection: Form.Dropdown.Section,
+    FormSeparator: Form.Separator,
+    FormTagPicker: Form.TagPicker,
+    FormTagPickerItem: Form.TagPicker.Item
+  });
+  api2.__esModule = true;
+  api2.default = api2;
   return new Proxy(api2, {
     get(target, name) {
       if (name in target || typeof name === "symbol" || name === "__esModule" || name === "default") return target[name];
