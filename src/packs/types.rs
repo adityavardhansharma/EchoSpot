@@ -166,7 +166,11 @@ impl Type {
             "any" => Ok(v),
             "number" | "percent" | "duration" => match &v {
                 Value::Number(_) => Ok(v),
-                Value::String(s) => s.trim().replace(',', "").parse::<f64>().ok().and_then(|n| serde_json::Number::from_f64(n)).map(Value::Number).ok_or(()).or_else(|_| wrong(&v)),
+                Value::String(s) => match s.trim().replace(',', "").parse::<f64>() {
+                    Ok(n) if n.fract() == 0.0 && n.abs() < 9.0e15 => Ok(json!(n as i64)),
+                    Ok(n) if n.is_finite() => Ok(json!(n)),
+                    _ => wrong(&v),
+                },
                 _ => wrong(&v),
             },
             "bool" => match &v {

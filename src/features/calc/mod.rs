@@ -1,7 +1,7 @@
 //! The inline calculator: arithmetic in symbols or words, percentages, functions, number bases,
 //! units and live currency, and (in `dates`) countdowns, date maths and time zones.
 
-mod currency;
+pub mod currency;
 mod dates;
 mod units;
 pub mod zones;
