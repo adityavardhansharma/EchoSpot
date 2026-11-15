@@ -77,6 +77,8 @@ pub(crate) struct Inner {
     name: Rc<str>,
     pub(crate) prefix: Rc<str>,
     pub(crate) options: ScriptOptions,
+    /// A time limit for the entries made inside [`Script::with_time_limit`], in place of the script's own.
+    entry_limit: Cell<Option<Duration>>,
     vm: RefCell<Option<Rc<Vm>>>,
     pub(crate) sources: RefCell<Sources>,
     pub(crate) failed: RefCell<Option<ScriptError>>,
@@ -112,6 +114,7 @@ impl Script {
             name: name.into(),
             prefix: format!("luau:{name}:").into(),
             options,
+            entry_limit: Cell::new(None),
             vm: RefCell::new(None),
             sources: RefCell::new(sources.clone()),
             failed: RefCell::new(None),
@@ -219,6 +222,16 @@ impl Script {
         ran.unwrap_or_else(|| Err(self.inner.failed.borrow().clone().unwrap_or_else(|| ScriptError::new(ErrorKind::Missing, "not running"))))
     }
 
+    /// Runs `f` with `limit` as the watchdog's limit for every entry into the VM it makes, in
+    /// place of [`ScriptOptions::time_limit`](crate::ScriptOptions::time_limit): a host gives a
+    /// render or a per-keystroke query less time than a task.
+    pub fn with_time_limit<R>(&self, limit: Duration, f: impl FnOnce() -> R) -> R {
+        let before = self.inner.entry_limit.replace(Some(limit));
+        let out = f();
+        self.inner.entry_limit.set(before);
+        out
+    }
+
     /// Why the script isn't running, if it isn't.
     pub fn error(&self) -> Option<ScriptError> {
         self.inner.failed.borrow().clone()
@@ -289,7 +302,7 @@ impl Inner {
     /// One entry into the VM under the watchdog, counted in the metrics. Errors are logged.
     pub(crate) fn timed<R>(&self, vm: &Vm, f: impl FnOnce(&Vm) -> R) -> R {
         vm.collect();
-        let _armed = watchdog::arm(self.options.time_limit);
+        let _armed = watchdog::arm(self.entry_limit.get().unwrap_or(self.options.time_limit));
         let start = Instant::now();
         let out = f(vm);
         let mut m = self.metrics.get();

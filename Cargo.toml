@@ -15,6 +15,11 @@ path = "src/main.rs"
 rune = { path = "rune-dock/crates/rune" }
 rune-kit = { path = "rune-dock/crates/rune-kit", features = ["markdown"] }
 rune-fx = { path = "rune-dock/crates/rune-fx" }
+# Packs: one sandboxed Luau VM per pack (API-DESIGN.md).
+rune-luau = { path = "rune-dock/crates/rune-luau" }
+toml = "0.8"
+# Icon checks rasterise an SVG the way Rune does.
+resvg = { version = "0.45", default-features = false }
 wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

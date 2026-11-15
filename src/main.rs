@@ -13,6 +13,7 @@ mod icons;
 mod ipc;
 mod live;
 mod model;
+mod packs;
 mod settings;
 mod settings_ui;
 mod store;
