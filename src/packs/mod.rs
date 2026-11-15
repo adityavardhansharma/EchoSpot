@@ -3,6 +3,7 @@
 //! A pack is a folder of Luau under `~/.config/echospot/packs/<id>`. It declares abilities (typed
 //! functions with an address), surfaces, triggers and stores; every contact with the world goes
 //! through one broker, which checks grants, writes the audit log and records how to undo.
+#![allow(dead_code)]
 
 use std::path::PathBuf;
 
@@ -32,3 +33,6 @@ pub fn data_dir(pack: &str) -> PathBuf {
     let _ = std::fs::create_dir_all(&dir);
     dir
 }
+
+pub mod error;
+pub mod manifest;
