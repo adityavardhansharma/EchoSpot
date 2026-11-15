@@ -19,6 +19,7 @@ pub mod fs;
 mod http;
 mod notes;
 mod system;
+pub mod wrap;
 
 /// What a pack needs before it may call a built-in.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -182,6 +183,7 @@ pub fn all() -> Vec<Spec> {
     exec::register(&mut out);
     fs::register(&mut out);
     system::register(&mut out);
+    wrap::fixed(&mut out);
     out
 }
 
@@ -190,13 +192,13 @@ pub fn find(address: &str) -> Option<Spec> {
     all().into_iter().find(|s| s.address == address)
 }
 
-/// Built-ins made from what the user already has: scripts, snippets, quicklinks, AI presets.
+/// Built-ins made from what the user already has: scripts, snippets, quicklinks.
 pub fn dynamic() -> Vec<Spec> {
-    Vec::new()
+    wrap::dynamic()
 }
 
 pub fn find_dynamic(address: &str) -> Option<Spec> {
-    dynamic().into_iter().find(|s| s.address == address)
+    wrap::find(address)
 }
 
 /// Whether `address` is in a reserved pack: one a pack may never define.

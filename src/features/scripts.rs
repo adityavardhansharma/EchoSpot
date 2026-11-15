@@ -193,7 +193,7 @@ fn strip_ansi(text: &str) -> String {
 }
 
 /// Runs a script to its end: its output, both streams, and whether it exited cleanly.
-fn execute(script: &Script, args: &[String]) -> (String, bool) {
+pub fn execute(script: &Script, args: &[String]) -> (String, bool) {
     let mut cmd = match &script.path {
         Some(path) => {
             let first = std::fs::read_to_string(path).ok().and_then(|t| t.lines().next().map(String::from)).unwrap_or_default();
