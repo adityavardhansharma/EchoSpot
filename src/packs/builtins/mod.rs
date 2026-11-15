@@ -14,6 +14,8 @@ use super::types::Type;
 mod calc;
 mod clipboard;
 mod desk;
+mod exec;
+pub mod fs;
 mod http;
 mod notes;
 mod system;
@@ -177,6 +179,8 @@ pub fn all() -> Vec<Spec> {
     notes::register(&mut out);
     desk::register(&mut out);
     http::register(&mut out);
+    exec::register(&mut out);
+    fs::register(&mut out);
     system::register(&mut out);
     out
 }

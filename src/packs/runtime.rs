@@ -653,7 +653,9 @@ impl Runtime {
             }
             ctx.pack = caller.to_string();
             ctx.data_dir = super::data_dir(caller);
+            // What the user picked for this pack, this session and before.
             ctx.picked = self.picked.get(caller).cloned().unwrap_or_default();
+            ctx.picked.extend(self.grants.held(caller).into_iter().filter(|a| a.kind == "picked").map(|a| PathBuf::from(a.what)));
             ctx.budget_left = perms.ai.as_ref().map_or(0.0, |ai| ai.budget_usd_month - audit::spend_this_month(caller));
             ctx.perms = perms;
         }
