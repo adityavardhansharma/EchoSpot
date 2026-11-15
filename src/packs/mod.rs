@@ -39,3 +39,4 @@ pub mod manifest;
 pub mod types;
 pub mod json;
 pub mod grants;
+pub mod audit;
