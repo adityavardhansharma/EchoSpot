@@ -36,3 +36,4 @@ pub fn data_dir(pack: &str) -> PathBuf {
 
 pub mod error;
 pub mod manifest;
+pub mod types;
