@@ -75,3 +75,4 @@ pub mod links;
 pub mod mcp;
 pub mod skill;
 pub mod answers;
+pub mod draw;
