@@ -258,6 +258,58 @@ pub struct Runtime {
     next_effect: u64,
     /// The stores version surfaces last saw, to notice writes.
     seen_stores: u64,
+    /// Ask before a final call a person started. The app does; the command line and tests don't.
+    pub confirm_finals: bool,
+    pending: HashMap<u64, Pending>,
+    /// Schedules and triggers by `<pack>.<name>`: when each last ran.
+    pub runs: BTreeMap<String, Ran>,
+    /// Calls a schedule or an event started, to note how each ended.
+    unasked: HashMap<u64, String>,
+    /// What each address's signature read as when last loaded, to notice a change.
+    signatures: HashMap<String, String>,
+    /// What each pack ability's input was when last loaded, to tell a change that breaks a caller.
+    inputs: HashMap<String, Type>,
+    /// Rust packs being built on a thread.
+    builds: std::collections::HashSet<PathBuf>,
+    /// Build Rust packs before `load` returns, telling this how it goes: the command line and
+    /// tests. The app builds on a thread and shows the progress on the pack's row.
+    pub build_inline: Option<Box<dyn Fn(&super::wasm::Progress)>>,
+}
+
+/// A pack with both tiers: what `init.luau` declares and what the Rust component does. A name
+/// is one or the other, never both.
+fn merge(mut luau: Index, rust: &Index) -> Result<Index> {
+    fn take<T: Clone>(into: &mut BTreeMap<String, T>, from: &BTreeMap<String, T>, what: &str) -> Result<()> {
+        for (name, item) in from {
+            if into.insert(name.clone(), item.clone()).is_some() {
+                return Err(PackError::new("E0202", format!("{what} {name:?} is declared in both init.luau and src/lib.rs; keep one")).learn("echospot dev docs rust"));
+            }
+        }
+        Ok(())
+    }
+    take(&mut luau.abilities, &rust.abilities, "the ability")?;
+    take(&mut luau.verbs, &rust.verbs, "the verb")?;
+    take(&mut luau.stores, &rust.stores, "the store")?;
+    take(&mut luau.triggers, &rust.triggers, "the trigger")?;
+    if luau.title.is_empty() {
+        luau.title = rust.title.clone();
+    }
+    Ok(luau)
+}
+
+/// Why a caller written for input `old` can't call with input `new`: a field it never had to give
+/// is now required, or a field takes a type the old one's values aren't.
+fn breaking(old: &Type, new: &Type) -> Option<String> {
+    for (name, t) in &new.fields {
+        let required = !t.optional && t.default.is_none();
+        match old.fields.get(name) {
+            None if required => return Some(format!("it now needs `{name}`")),
+            Some(was) if !t.accepts(was) => return Some(format!("`{name}` is now {} where it was {}", t.label(), was.label())),
+            Some(was) if required && (was.optional || was.default.is_some()) => return Some(format!("`{name}` can no longer be left out")),
+            _ => {}
+        }
+    }
+    None
 }
 
 fn timeline_path() -> PathBuf {
@@ -268,11 +320,16 @@ impl Runtime {
     pub fn new() -> Self {
         let (worker_tx, worker_rx) = channel();
         let timeline: VecDeque<Effect> = std::fs::read_to_string(timeline_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+        let shared = Shared::default();
+        *shared.log_file.borrow_mut() = Some(log_path());
         Self {
-            shared: Rc::new(Shared::default()), packs: BTreeMap::new(), grants: Grants::load(), frames: HashMap::new(), done: HashMap::new(),
+            shared: Rc::new(shared), packs: BTreeMap::new(), grants: Grants::load(), frames: HashMap::new(), done: HashMap::new(),
             worker_tx, worker_rx, waker: Arc::default(), events: Vec::new(), dry_log: Vec::new(),
             next_effect: timeline.iter().map(|e| e.id).max().unwrap_or(0) + 1, timeline,
             fixtures: None, record: false, picked: HashMap::new(), ephemeral: false, seen_stores: 0,
+            confirm_finals: false, pending: HashMap::new(), unasked: HashMap::new(), signatures: HashMap::new(),
+            builds: Default::default(), build_inline: None, inputs: HashMap::new(),
+            runs: std::fs::read_to_string(runs_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default(),
         }
     }
 
