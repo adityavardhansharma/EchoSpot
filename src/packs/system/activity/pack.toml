@@ -1,0 +1,8 @@
+id = "activity"
+name = "Timeline"
+api = 1
+tint = "indigo"
+description = "What you did lately, and taking it back."
+
+[permissions]
+calls = ["timeline.list", "timeline.undo"]
