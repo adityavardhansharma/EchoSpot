@@ -210,7 +210,9 @@ impl SettingsUi {
         if let Some((w, h, rgba)) = shot {
             self.set_backdrop(w, h, rgba);
         }
-        crate::live::start_settings();
+        if !(self.settings.liquid() && crate::seethrough::start("settings")) {
+            crate::live::start_settings();
+        }
         crate::live::own_shadows_off();
     }
 
@@ -1557,6 +1559,6 @@ pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 impl crate::glass::Liquid for SettingsUi {
     fn pane(&self) -> Option<crate::glass::Pane<'_>> {
-        self.settings.liquid().then(|| crate::glass::Pane { window: SIZE, dark: self.system_dark.get(), level: self.settings.liquid, shot: &self.glass })
+        self.settings.liquid().then(|| crate::glass::Pane { window: SIZE, dark: self.settings.dark(self.system_dark.get()), level: self.settings.liquid, shot: &self.glass, through: crate::seethrough::live("settings").then_some("settings") })
     }
 }
