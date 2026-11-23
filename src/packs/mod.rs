@@ -79,3 +79,4 @@ pub mod draw;
 pub mod host;
 pub mod slots;
 pub mod cli;
+pub mod wasm;

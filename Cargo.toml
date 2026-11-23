@@ -32,6 +32,14 @@ rustix = { version = "1", features = ["fs", "mm"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 bitflags = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# Packs, the Rust tier (API-DESIGN.md §20): Rust compiled to WebAssembly components.
+wasmtime = { version = "51", optional = true, default-features = false, features = ["runtime", "cranelift", "component-model", "parallel-compilation", "std"] }
+wasmtime-wasi = { version = "51", optional = true, default-features = false, features = ["p2"] }
+
+[features]
+default = ["wasm"]
+# Rust packs. Without it a pack with a Cargo.toml is refused with an error that says so.
+wasm = ["dep:wasmtime", "dep:wasmtime-wasi"]
 
 # Rune's vendored crates must be patched by every app that builds it.
 [patch.crates-io]
