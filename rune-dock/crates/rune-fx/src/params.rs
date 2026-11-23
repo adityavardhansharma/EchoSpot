@@ -386,6 +386,18 @@ pub struct LensParams {
     pub union_k: f32,
     /// 0..1: morph the union toward `second` alone.
     pub morph: f32,
+    /// 0..1: how opaque the glass is drawn. At 1 it replaces what is behind (blended with the
+    /// backdrop at its anti-aliased edge); below 1 it is drawn translucent over a clear window,
+    /// for see-through capture (rune-glass), where the compositor's own blend supplies the rest.
+    pub opacity: f32,
+    /// 0..1: Regular glass. The tint thickens wherever what is behind would fight what sits on
+    /// the glass (a light backdrop under a dark tint and its light text, a dark one under a light
+    /// tint), and thins where it wouldn't, so content stays legible over anything while the
+    /// glass stays as clear as it can. At 0 the tint is a plain multiply by `tint_amount`.
+    pub adapt: f32,
+    /// A specular line all round the edge, whatever surrounds it, on top of the reflected one
+    /// (`rim`) that follows the light and the surroundings. 0 for none.
+    pub sheen: f32,
 }
 
 impl Default for LensParams {
@@ -405,6 +417,9 @@ impl Default for LensParams {
             second: None,
             union_k: 22.0,
             morph: 0.0,
+            opacity: 1.0,
+            adapt: 0.0,
+            sheen: 0.0,
         }
     }
 }

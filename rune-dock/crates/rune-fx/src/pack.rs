@@ -264,6 +264,8 @@ impl FxLayer {
                     DistortParams::Lens(l) => {
                         i.t[2] = 2.0;
                         i.c0 = l.tint.v4();
+                        i.c0[3] = l.opacity.clamp(0.0, 1.0);
+                        i.aux = [l.adapt.clamp(0.0, 1.0), l.sheen.max(0.0), 0.0, 0.0];
                         i.p0 = [l.bevel, l.depth, l.dispersion, l.magnification];
                         i.p1 = [l.presence.clamp(0.0, 1.0), l.frost, l.shadow, l.rim];
                         let mut b = r;
