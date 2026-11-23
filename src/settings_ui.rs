@@ -55,6 +55,7 @@ pub enum Pane {
     Clipboard,
     Files,
     Extensions,
+    Packs,
     Shortcuts,
     About,
 }
@@ -66,13 +67,14 @@ struct PaneInfo {
     tint: Tint,
 }
 
-const PANES: [PaneInfo; 8] = [
+const PANES: [PaneInfo; 9] = [
     PaneInfo { pane: Pane::General, title: "General", glyph: &icons::GEAR, tint: Tint::Graphite },
     PaneInfo { pane: Pane::Commands, title: "Commands", glyph: &icons::BOLT, tint: Tint::Pink },
     PaneInfo { pane: Pane::Ai, title: "AI", glyph: &icons::AI, tint: Tint::Violet },
     PaneInfo { pane: Pane::Clipboard, title: "Clipboard", glyph: &icons::CLIPBOARD, tint: Tint::Orange },
     PaneInfo { pane: Pane::Files, title: "File Search", glyph: &icons::FILE_SEARCH, tint: Tint::Blue },
     PaneInfo { pane: Pane::Extensions, title: "Extensions", glyph: &icons::PUZZLE, tint: Tint::Green },
+    PaneInfo { pane: Pane::Packs, title: "Packs", glyph: &icons::BOX, tint: Tint::Orange },
     PaneInfo { pane: Pane::Shortcuts, title: "Shortcuts", glyph: &icons::KEYBOARD, tint: Tint::Blue },
     PaneInfo { pane: Pane::About, title: "About", glyph: &icons::LOGO, tint: Tint::Indigo },
 ];
@@ -1397,6 +1399,7 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
         Pane::Clipboard => clipboard(ui, &p),
         Pane::Files => files(ui, &p),
         Pane::Extensions => extensions(ui, &p, scale),
+        Pane::Packs => packs_pane(ui, &p),
         Pane::Shortcuts => shortcuts(&p),
         Pane::About => about(&p),
     };
@@ -1451,7 +1454,7 @@ pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Key::Command('f') if table => ui.filter.focused = true,
         Key::Down if !ui.editing() => ui.step_pane(1),
         Key::Up if !ui.editing() => ui.step_pane(-1),
-        Key::Command(c @ '1'..='8') => ui.show(PANES[c as usize - '1' as usize].pane),
+        Key::Command(c @ '1'..='9') => ui.show(PANES[c as usize - '1' as usize].pane),
         _ => return false,
     }
     true
