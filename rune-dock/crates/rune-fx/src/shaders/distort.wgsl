@@ -126,7 +126,11 @@ fn shade(in: VOut) -> vec4f {
             // Frosted: the dual-filter pyramid, refracted like the clear image (so the rim still
             // bends and splits), then the material transfer and a static grain against banding.
             let blr = vec3f(bdb(srcr, s).r, bdb(srcg, s).g, bdb(srcb, s).b);
-            col = mix(col, blr, i.xf.y);
+            // The rim stays clearer than the body: the bevel bends what is behind into a crisp,
+            // squeezed band (the shape's thickness made visible) and the frost deepens toward
+            // the flat middle, where the content sits.
+            let edge = mix(0.3, 1.0, smoothstep(0.05, 0.85, tt));
+            col = mix(col, blr, i.xf.y * edge);
             let k = presence * smoothstep(0.0, 0.6, frost);
             col = frosted(col, k);
             let ip = vec2u(in.px);
