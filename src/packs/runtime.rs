@@ -91,6 +91,12 @@ pub struct Pack {
     pub load_ms: f64,
     /// Whether what runs is older than what is on disk.
     pub stale: bool,
+    /// A Rust pack's component (API-DESIGN.md §20), compiled to native code.
+    pub wasm: Option<Arc<super::wasm::Module>>,
+    /// What the component declares: these names run in it, not in Luau.
+    pub wasm_index: Index,
+    /// A build in progress: what a row says while it runs.
+    pub building: Option<String>,
 }
 
 impl Pack {
@@ -99,6 +105,23 @@ impl Pack {
     }
     pub fn ability(&self, name: &str) -> Option<&Ability> {
         self.index.abilities.get(name)
+    }
+    /// What a row says beside the pack's name: a build's progress, or its state.
+    pub fn status(&self) -> String {
+        match &self.building {
+            Some(progress) if self.state != State::Ready => progress.clone(),
+            _ => self.state.label().to_string(),
+        }
+    }
+    /// Whether this entry (`__invoke`, `__verb`…) of `name` runs in the Rust component.
+    fn in_wasm(&self, entry: &str, name: &str) -> bool {
+        self.wasm.is_some() && match entry {
+            "__invoke" => self.wasm_index.abilities.contains_key(name),
+            "__verb" => self.wasm_index.verbs.contains_key(name),
+            "__trigger" => self.wasm_index.triggers.contains_key(name),
+            "__undo" => self.wasm_index.abilities.contains_key(name) || self.wasm_index.verbs.contains_key(name),
+            _ => false,
+        }
     }
 }
 
