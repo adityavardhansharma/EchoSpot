@@ -193,6 +193,25 @@ fn shade(in: VOut) -> vec4f {
         let fres = pow(1.0 - tt, 4.0) * 0.035 * (0.3 + 0.7 * sky) * envk;
         let light = (spec + caustic + fres) * presence * rimk;
         col = col * (1.0 - 0.02 * presence) + vec3f(light);
+        // Translucent glass (see-through capture): the compositor puts the real screen under it,
+        // and lets a sliver of it through unbent, which is how the app reads it back.
+        let op = i.c0.a;
+        if (op < 0.999) {
+            // The compositor adds (1 - a) of the real screen, unbent and sharp, in its 8-bit sRGB
+            // blend. What we last saw there (the backdrop: rune-glass recovered it) is taken out
+            // beforehand, so the sum is the glass alone; only a change since shows, for a frame,
+            // at that sliver of its strength. Not all of it: what is taken out comes from what was
+            // read back through the glass, and taking out all of it would feed any error in that
+            // reading straight back into the next; at most four fifths keeps the loop damped.
+            let a = op * coverage + dark * (1.0 - coverage);
+            let under = to_srgb(bd(c.p, s).rgb);
+            let want = mix(under * (1.0 - dark), to_srgb(col), coverage);
+            let enc = clamp(want - under * (1.0 - a) * 0.8, vec3f(0.0), vec3f(a));
+            if (g.srgb > 0.5) {
+                return vec4f(to_lin(enc / max(a, 1e-4)) * a, a);
+            }
+            return vec4f(to_lin(enc), a);
+        }
         // Coverage blends glass over the untouched backdrop + shadow.
         let base = bd(c.p, s).rgb * (1.0 - dark);
         return vec4f(mix(base, col, coverage), 1.0);
