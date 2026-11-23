@@ -316,6 +316,15 @@ fn timeline_path() -> PathBuf {
     super::state_dir().join("timeline.json")
 }
 
+/// Where pack prints, warnings and errors are kept for `echospot dev logs`.
+pub fn log_path() -> PathBuf {
+    super::state_dir().join("logs.jsonl")
+}
+
+fn runs_path() -> PathBuf {
+    super::state_dir().join("triggers.json")
+}
+
 impl Runtime {
     pub fn new() -> Self {
         let (worker_tx, worker_rx) = channel();
@@ -333,12 +342,32 @@ impl Runtime {
         }
     }
 
+    /// The runtime a command-line call runs in: the real grants, which it can read and never
+    /// write, and no window to ask a person anything in.
+    pub fn for_cli() -> Self {
+        let mut rt = Self::new();
+        rt.grants = Grants::load().read_only();
+        rt.build_inline = Some(Box::new(|p| {
+            use std::io::{IsTerminal, Write};
+            if std::io::stderr().is_terminal() {
+                // An empty progress means the build ended: the line is cleared.
+                let label = if *p == super::wasm::Progress::default() { String::new() } else { p.label() };
+                eprint!("\r\x1b[K{label}");
+                let _ = std::io::stderr().flush();
+            }
+        }));
+        rt
+    }
+
     /// A runtime that leaves nothing behind: in-memory grants, no timeline file.
     pub fn ephemeral() -> Self {
         let mut rt = Self::new();
         rt.grants = Grants::in_memory();
         rt.timeline.clear();
+        rt.runs.clear();
+        *rt.shared.log_file.borrow_mut() = None;
         rt.ephemeral = true;
+        rt.build_inline = Some(Box::new(|_| {}));
         rt
     }
 
