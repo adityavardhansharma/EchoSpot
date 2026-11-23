@@ -185,7 +185,9 @@ fn shade(in: VOut) -> vec4f {
         // opposite ones), fading along the straight edges.
         let line = gauss(depth - 0.7, 0.5);
         let arcs = 0.85 * pow(facing, 7.0) + 0.3 * pow(away, 8.0);
-        let spec = line * arcs * envk;
+        // ...and the sheen: the whole edge catching a little light, brighter up top where the
+        // sky would be, so the shape reads even over a flat, dark screen.
+        let spec = line * (arcs * envk + i.aux.y * (0.4 + 0.6 * sky));
         // Caustic: light focused through the bevel lands as a soft glow just inside the lit arc.
         let caustic = gauss(depth - bevel * 0.45, bevel * 0.25) * pow(facing, 5.0) * 0.06 * envk;
         let fres = pow(1.0 - tt, 4.0) * 0.035 * (0.3 + 0.7 * sky) * envk;
