@@ -5,7 +5,7 @@
 // shock:  p0 (reach pt, width pt, amount pt, chroma)  p1 (t0, duration, _, _)  aux: origin
 // lens:   p0 (bevel pt, depth pt, dispersion, magnification)  p1 (presence, frost, shadow, rim)
 //         p2 (light angle rad, tint, union k pt, radius B)  p3 rect B (w = 0: none)  shape.w morph A->B
-//         c0 tint
+//         c0 tint rgb, opacity a  aux (adapt, sheen, _, _)
 // crt:    p0 (bulge, scanline period pt, scanline depth, chroma pt)  p1 (vignette, glow, roll, feather)
 // split:  p0 (offset x pt, offset y pt, glitch, feather)
 
