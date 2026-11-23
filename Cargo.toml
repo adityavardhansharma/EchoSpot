@@ -17,6 +17,8 @@ rune-kit = { path = "rune-dock/crates/rune-kit", features = ["markdown"] }
 rune-fx = { path = "rune-dock/crates/rune-fx" }
 # Packs: one sandboxed Luau VM per pack (API-DESIGN.md).
 rune-luau = { path = "rune-dock/crates/rune-luau" }
+# Liquid Glass that bends the live screen behind it: see-through capture, standard protocols only.
+rune-glass = { path = "rune-dock/crates/rune-glass" }
 toml = "0.8"
 # Icon checks rasterise an SVG the way Rune does.
 resvg = { version = "0.45", default-features = false }
