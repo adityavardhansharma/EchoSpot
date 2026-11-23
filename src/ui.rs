@@ -608,6 +608,22 @@ fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
     el().pin(FULL, FULL, FULL, FULL).child(dim).child(row().pin(FULL, FULL, FULL, FULL).center().child(card))
 }
 
+/// A pack's screen, where the host draws its blocks itself rather than as the palette's rows.
+fn pack_body(s: &App, p: &Palette, scale: f32) -> Option<El> {
+    let drawn = s.packs.drawn.borrow();
+    let d = drawn.get(&(s.screens.len() - 1)).filter(|d| d.custom)?;
+    let dir = s.packs.rt.packs.get(&d.pack).map(|pack| pack.dir.clone()).unwrap_or_default();
+    // A scene that asks for a tile is drawn as one, in the middle of the palette.
+    if let Some((w, h)) = s.packs.scene_size {
+        let cx = crate::packs::draw::Ctx::new(*p, d.look, scale, Some(&s.icons), &d.pack, &d.target, dir, w as f32 - space::XL * 2.0).with_inputs(&s.packs.inputs);
+        let tile = col().size(w as f32, h as f32).padding(space::XL).justify_center().radius(radius::CARD).clip_rounded(radius::CARD).fill(p.card_fill).border(1.0, p.card_stroke)
+            .child(crate::packs::draw::block::<App>(&cx, &d.blocks));
+        return Some(col().pin(FULL, FULL, FULL, FULL).center().child(tile));
+    }
+    let cx = crate::packs::draw::Ctx::new(*p, d.look, scale, Some(&s.icons), &d.pack, &d.target, dir, size::PANEL_W).with_inputs(&s.packs.inputs);
+    Some(crate::packs::draw::body::<App>(&cx, &d.blocks))
+}
+
 /// The surface every EchoSpot window stands on: a rounded panel inset in its window by
 /// `WINDOW_MARGIN` (room for the shadow), filled with the screen behind it, blurred, under the
 /// scrim. `backdrop` is that capture when there is one; `mode` is the Surface setting. `liquid`
@@ -643,10 +659,16 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let p = theme::palette(s.settings.dark(env.system_dark));
     let scale = env.scale.max(1.0);
     let screen = s.top();
+    // A pack's screen is drawn in its Look; everything else in EchoSpot's own.
+    let p = match s.packs.drawn.borrow().get(&(s.screens.len() - 1)) {
+        Some(d) if matches!(screen.route, Route::Pack { .. }) => d.look.palette(p),
+        _ => p,
+    };
     let body = match (&s.form, screen.layout) {
         (Some(form), _) => form_body(&p, form),
         (None, Layout::List) => match &screen.route {
             Route::Ext(id) => crate::ext::view::body(s, &p, scale, *id).unwrap_or_else(|| list_body(s, &p, scale, screen)),
+            Route::Pack { .. } => pack_body(s, &p, scale).unwrap_or_else(|| list_body(s, &p, scale, screen)),
             Route::Ai if !s.chat.messages.is_empty() => crate::features::ai::body(s, &p),
             Route::Snap(only) if !screen.items.is_empty() => crate::features::snap::body(s, &p, scale, *only),
             Route::Page if s.page.is_some() => page_body(&p, s.page.as_ref().map(|page| page.markdown.as_str()).unwrap_or("")),
