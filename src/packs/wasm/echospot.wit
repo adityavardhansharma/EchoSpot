@@ -1,0 +1,43 @@
+// The Rust tier of EchoSpot packs (API-DESIGN.md §20): what a pack compiled to a WebAssembly
+// component imports from EchoSpot, and what it exports. Rust packs are headless: they declare
+// abilities, verbs, stores and triggers; their UI is the default faces, or a Luau file beside them.
+//
+// Values cross as JSON, in the same shapes Luau packs use, so one set of declarations serves both
+// tiers: a declaration is what `__describe` returns, an error is what `echospot dev` prints.
+// `echospot dev check` writes this file into a Rust pack's `wit/` folder; don't edit that copy.
+
+package echospot:pack@1.0.0;
+
+/// The only way out of the component. Every call goes through EchoSpot's broker, as this pack and
+/// with this pack's own grants, and is checked, logged and recorded for undo like any other.
+interface host {
+    /// Calls an ability by address and waits for it. `input` and the answer are JSON; an error
+    /// is JSON too: `{ "code": "E0300", "message": "…", "nearest": […], "learn": "…" }`.
+    /// A store is read the same way: `<this pack>.stores.<name>`, with `{ "at": seconds }` for the past.
+    call: func(address: string, input: string) -> result<string, string>;
+    /// Writes one of this pack's own stores. Only the owner writes.
+    put: func(store: string, value: string) -> result<_, string>;
+    /// A line for `echospot dev logs`: level is `info`, `warn` or `error`.
+    log: func(level: string, message: string);
+}
+
+world pack {
+    import host;
+
+    /// The call an entry runs under.
+    record context {
+        /// This pack's id.
+        pack: string,
+        /// True while `echospot dev run --dry` or a test is stubbing effects.
+        dry: bool,
+    }
+
+    /// What the pack declares, as JSON: `{ "title", "abilities": { name: { title, kind, input,
+    /// output, examples, … } }, "verbs", "stores", "triggers" }`. Called once when the pack loads.
+    export describe: func() -> string;
+
+    /// Runs one entry. `entry` is `invoke` (an ability's run), `undo`, `verb` or `trigger`;
+    /// `name` is what it declared; `input` is JSON; `output` is JSON for an undo, `null` otherwise.
+    /// The answer is JSON; an error is a message or an error as JSON.
+    export run: func(cx: context, entry: string, name: string, input: string, output: string) -> result<string, string>;
+}
