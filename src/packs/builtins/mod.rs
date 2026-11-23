@@ -4,7 +4,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(test)]
+use serde_json::json;
 
 use super::error::{PackError, Result};
 use super::index::Kind;
@@ -125,6 +127,18 @@ impl std::fmt::Debug for Caller {
 }
 
 type RunFn = dyn Fn(&Ctx, &Value) -> Run + Send + Sync;
+
+/// Built-in effects that record how to take themselves back.
+pub const UNDOABLE: &[&str] = &["clipboard.copy", "clipboard.paste", "files.write", "files.remove", "notes.create", "notes.append", "notes.write", "notes.delete"];
+/// Built-in effects that leave nothing lasting to take back: a notification, a page opened, a
+/// window focused or moved, Timeline's own undo.
+pub const MOMENTARY: &[&str] = &["system.notify", "system.open_url", "quicklinks.open", "windows.focus", "windows.move", "timeline.undo"];
+
+/// Whether an effect a pack calls can be undone, or needs none: what an effect with no undo of
+/// its own may call (§6.2).
+pub fn effect_is_covered(address: &str) -> bool {
+    UNDOABLE.contains(&address) || MOMENTARY.contains(&address)
+}
 
 #[derive(Clone)]
 pub struct Spec {
