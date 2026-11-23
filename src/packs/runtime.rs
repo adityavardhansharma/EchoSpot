@@ -1654,6 +1654,21 @@ impl Runtime {
         before != (self.shared.version.get(), self.events.len(), self.done.len())
     }
 
+    /// A Rust pack's call writing one of its own stores; the same rules as Luau's `cx:put`.
+    fn put_store(&mut self, token: u64, name: &str, value: Value) -> Result<()> {
+        let Some(pack) = self.frames.get(&token).map(|f| f.pack.clone()).filter(|p| !p.is_empty()) else {
+            return Err(PackError::new("E0900", "that call has already finished"));
+        };
+        let key = format!("{pack}.{name}");
+        if !self.shared.stores.borrow().exists(&key) {
+            return Err(PackError::new("E0412", format!("{pack} declares no store {name:?}; only a pack's own stores can be written")).learn("echospot dev docs stores"));
+        }
+        let put = self.shared.stores.borrow_mut().put(&key, value, audit::now());
+        put.map_err(|e| PackError::new("E0302", format!("store {name}: {e}")))?;
+        self.shared.invalidate(&pack);
+        Ok(())
+    }
+
     /// Whether any call is still running.
     pub fn busy(&self) -> bool {
         !self.frames.is_empty()
