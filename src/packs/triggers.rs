@@ -41,6 +41,71 @@ pub fn parse_at(text: &str) -> Option<(u32, u32, [bool; 7])> {
     Some((h, m, days))
 }
 
+/// One thing that runs unasked: a pack's trigger, or an ability with `every`, `at` or `on`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Entry {
+    /// `<pack>.triggers.<name>`, or the ability's address.
+    pub key: String,
+    pub pack: String,
+    pub name: String,
+    pub trigger: bool,
+    pub every: String,
+    pub at: String,
+    pub on: Vec<String>,
+}
+
+impl Entry {
+    /// How its schedule reads in Settings: `every 15m`, `at 09:00 weekdays`, `on clipboard.changed`.
+    pub fn when(&self) -> String {
+        let mut parts = Vec::new();
+        if !self.every.is_empty() {
+            parts.push(format!("every {}", self.every));
+        }
+        if !self.at.is_empty() {
+            parts.push(format!("at {}", self.at));
+        }
+        if !self.on.is_empty() {
+            parts.push(format!("on {}", self.on.join(", ")));
+        }
+        parts.join(" · ")
+    }
+}
+
+/// The last moment at or before `now` that `at` names, in seconds since 1970.
+fn last_at(at: &str, now: f64) -> Option<f64> {
+    use chrono::{Datelike, Duration, Local, TimeZone};
+    let (h, m, days) = parse_at(at)?;
+    let today = Local.timestamp_opt(now as i64, 0).single()?;
+    (0..8).find_map(|back| {
+        let day = today.date_naive() - Duration::days(back);
+        let when = Local.from_local_datetime(&day.and_hms_opt(h, m, 0)?).single()?;
+        (days[day.weekday().num_days_from_monday() as usize] && (when.timestamp() as f64) <= now).then_some(when.timestamp() as f64)
+    })
+}
+
+/// Whether a schedule has come due: `last` is when it last ran (zero for never).
+pub fn due(entry: &Entry, last: f64, now: f64) -> bool {
+    if let Some(every) = parse_every(&entry.every)
+        && now - last >= every {
+        return true;
+    }
+    // A time of day runs once for each time it passes; one missed while EchoSpot was closed
+    // runs when it next starts, if that is within the hour.
+    match last_at(&entry.at, now) {
+        Some(when) => last < when && now - when < 3600.0,
+        None => false,
+    }
+}
+
+/// Whether a trigger's `on` entry hears `event`. `file.changed:<glob>` hears a change to a
+/// path its glob matches.
+pub fn listens(on: &str, event: &str, path: &str) -> bool {
+    match on.split_once(':') {
+        Some((name, glob)) => name == event && super::builtins::fs::glob(&super::builtins::fs::expand(glob).display().to_string(), path),
+        None => on == event,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -53,5 +118,25 @@ mod tests {
         assert_eq!(parse_at("09:00 weekdays"), Some((9, 0, [true, true, true, true, true, false, false])));
         assert_eq!(parse_at("18:30 mon,wed").unwrap().2, [true, false, true, false, false, false, false]);
         assert!(parse_at("25:00").is_none() && parse_at("09:00 someday").is_none());
+    }
+
+    #[test]
+    fn schedules_come_due() {
+        let entry = |every: &str, at: &str| Entry { key: "p.x".into(), pack: "p".into(), name: "x".into(), trigger: false, every: every.into(), at: at.into(), on: vec![] };
+        assert!(due(&entry("15m", ""), 0.0, 1_000_000.0));
+        assert!(!due(&entry("15m", ""), 1_000_000.0 - 60.0, 1_000_000.0));
+        assert!(due(&entry("15m", ""), 1_000_000.0 - 901.0, 1_000_000.0));
+        // A time of day: due just after it passes, once.
+        use chrono::{Local, TimeZone};
+        let nine = Local.with_ymd_and_hms(2026, 11, 16, 9, 0, 0).single().unwrap().timestamp() as f64;
+        assert!(due(&entry("", "09:00"), nine - 86_400.0, nine + 30.0));
+        assert!(!due(&entry("", "09:00"), nine + 10.0, nine + 30.0));
+        assert!(!due(&entry("", "09:00"), 0.0, nine - 30.0 + 7200.0 + 86_400.0 * 0.0 - 7200.0));
+        // 2026-11-16 is a Monday; a weekend schedule waits.
+        assert!(!due(&entry("", "09:00 weekends"), 0.0, nine + 30.0));
+        assert!(listens("clipboard.changed", "clipboard.changed", ""));
+        assert!(listens("file.changed:/tmp/notes/*.md", "file.changed", "/tmp/notes/a.md"));
+        assert!(!listens("file.changed:/tmp/notes/*.md", "file.changed", "/tmp/other/a.md"));
+        assert_eq!(entry("15m", "09:00").when(), "every 15m · at 09:00");
     }
 }

@@ -1225,7 +1225,9 @@ impl Runtime {
         let token = self.shared.token();
         let mut frame = Self::host_frame(pack, format!("{pack}.triggers.{name}"), Kind::Effect, false);
         frame.actor = pack.to_string();
+        frame.respond = Some(Responder::Drop);
         self.frames.insert(token, frame);
+        self.unasked.insert(token, format!("{pack}.triggers.{name}"));
         if let Err(e) = self.enter(pack, token, "__trigger", vec![Data::String(name.to_string()), to_data(&event)]) {
             self.finish(token, Err(e));
         }
@@ -1436,6 +1438,62 @@ impl Runtime {
             }
             std::thread::sleep(Duration::from_millis(1));
         }
+    }
+
+    // ---- Running unasked -----------------------------------------------------------------
+
+    /// Everything that runs on a schedule or an event, as `(key, pack, name, is_trigger, every, at, on)`.
+    pub fn unasked(&self) -> Vec<super::triggers::Entry> {
+        let mut out = Vec::new();
+        for pack in self.packs.values().filter(|p| p.state == State::Ready && (p.system || self.effective(p).background)) {
+            for (name, t) in &pack.index.triggers {
+                out.push(super::triggers::Entry { key: format!("{}.triggers.{name}", pack.id), pack: pack.id.clone(), name: name.clone(), trigger: true, every: t.every.clone(), at: t.at.clone(), on: t.on.clone() });
+            }
+            for (name, a) in pack.index.abilities.iter().filter(|(_, a)| a.has_run && (!a.every.is_empty() || !a.at.is_empty() || !a.on.is_empty())) {
+                out.push(super::triggers::Entry { key: format!("{}.{name}", pack.id), pack: pack.id.clone(), name: name.clone(), trigger: false, every: a.every.clone(), at: a.at.clone(), on: a.on.clone() });
+            }
+        }
+        out
+    }
+
+    fn run_unasked(&mut self, entry: &super::triggers::Entry, event: Value) -> u64 {
+        // Marked now, so a slow run isn't started twice.
+        self.runs.insert(entry.key.clone(), Ran { t: audit::now(), ok: true, error: String::new() });
+        if entry.trigger {
+            return self.trigger(&entry.pack, &entry.name, event);
+        }
+        let token = self.start(Origin::Trigger(entry.pack.clone()), &entry.key, json!({}), Responder::Drop, false);
+        if self.frames.contains_key(&token) {
+            self.unasked.insert(token, entry.key.clone());
+        }
+        token
+    }
+
+    /// Starts every schedule that has come due at `now` (seconds since 1970). Returns how many.
+    pub fn tick(&mut self, now: f64) -> usize {
+        let due: Vec<super::triggers::Entry> = self.unasked().into_iter().filter(|e| {
+            let last = self.runs.get(&e.key).map_or(0.0, |r| r.t);
+            super::triggers::due(e, last, now)
+        }).collect();
+        for entry in &due {
+            self.run_unasked(entry, json!({ "event": "schedule", "time": now }));
+        }
+        due.len()
+    }
+
+    /// Something happened: runs every trigger and ability that listens for it. `detail` rides
+    /// along (the path for `file.changed`). Returns how many started.
+    pub fn emit(&mut self, event: &str, detail: Value) -> usize {
+        let path = detail.get("path").and_then(Value::as_str).unwrap_or("").to_string();
+        let hit: Vec<super::triggers::Entry> = self.unasked().into_iter().filter(|e| e.on.iter().any(|on| super::triggers::listens(on, event, &path))).collect();
+        for entry in &hit {
+            let mut payload = json!({ "event": event, "time": audit::now() });
+            if let (Some(map), Some(extra)) = (payload.as_object_mut(), detail.as_object()) {
+                map.extend(extra.clone());
+            }
+            self.run_unasked(entry, payload);
+        }
+        hit.len()
     }
 
     pub fn set_scene(&mut self, scene: Option<Scene>) {
