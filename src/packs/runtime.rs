@@ -539,7 +539,7 @@ impl Runtime {
                     }
                     None => {
                         let manifest = Manifest { id: id.clone(), ..Default::default() };
-                        self.packs.insert(id.clone(), Pack { id: id.clone(), dir: dir.into(), manifest, state: State::Broken, error: Some(error), index: Index::default(), script: None, system: false, stamp: 0, load_ms: 0.0, stale: false });
+                        self.packs.insert(id.clone(), Pack { id: id.clone(), dir: dir.into(), manifest, state: State::Broken, error: Some(error), index: Index::default(), script: None, system: false, stamp: 0, load_ms: 0.0, stale: false, wasm: None, wasm_index: Index::default(), building: None });
                     }
                 }
                 self.events.push(Event::PacksChanged);
@@ -547,35 +547,65 @@ impl Runtime {
             }
         };
         let id = manifest.id.clone();
-        let system = self.packs.get(&id).is_some_and(|p| p.system && p.dir != dir) || dir.starts_with(super::state_dir().join("system"));
-        if !dir.join("init.luau").is_file() {
-            self.packs.insert(id.clone(), Pack { id: id.clone(), dir: dir.into(), manifest, state: State::Drafting, error: None, index: Index::default(), script: None, system, stamp: 0, load_ms: 0.0, stale: false });
+        // Only what EchoSpot itself unpacked is a system pack. A fork is the user's: it asks for its grants.
+        let system = dir.starts_with(super::system::dir());
+        let rust = super::wasm::is_rust(dir);
+        let luau = dir.join("init.luau").is_file();
+        // The Rust tier: the component, built if its sources are newer than it.
+        let mut component = None;
+        if rust {
+            match self.component(&id, dir, &manifest, system) {
+                Ok(Some(found)) => component = Some(found),
+                // A build is running on a thread; the pack loads again when it ends.
+                Ok(None) => return Some(id),
+                Err(error) => {
+                    self.fail(&id, dir, manifest, error, system);
+                    return Some(id);
+                }
+            }
+        }
+        if !luau && !rust {
+            self.packs.insert(id.clone(), Pack { id: id.clone(), dir: dir.into(), manifest, state: State::Drafting, error: None, index: Index::default(), script: None, system, stamp: 0, load_ms: 0.0, stale: false, wasm: None, wasm_index: Index::default(), building: None });
             self.events.push(Event::PacksChanged);
             return Some(id);
         }
         let read = vm::sources(dir).map_err(|e| PackError::new("E0200", format!("can't read the pack's files: {e}")).at(dir.display().to_string()));
-        let (sources, stamp) = match read {
+        let (sources, mut stamp) = match read {
             Ok(x) => x,
             Err(error) => {
                 self.fail(&id, dir, manifest, error, system);
                 return Some(id);
             }
         };
-        if self.packs.get(&id).is_some_and(|p| p.stamp == stamp && p.error.is_none() && p.dir == dir && (p.script.is_some() || !eager)) {
+        if let Some((_, _, rust_stamp)) = &component {
+            stamp = stamp.wrapping_mul(1_099_511_628_211) ^ rust_stamp;
+        }
+        if self.packs.get(&id).is_some_and(|p| p.stamp == stamp && p.error.is_none() && p.dir == dir && (p.script.is_some() || !eager || !luau)) {
             // Nothing changed on disk; the grants may have.
             self.settle_state(&id);
             return Some(id);
         }
         // The index cache: a pack that hasn't changed declares what it did, with no VM started.
-        if !eager && !self.packs.contains_key(&id)
+        if !eager && !rust && !self.packs.contains_key(&id)
             && let Some(index) = super::cache::read(&id, stamp) {
-            self.install(id.clone(), dir, manifest, index, None, system, stamp, started);
+            self.install(id.clone(), dir, manifest, index, None, None, system, stamp, started);
             return Some(id);
         }
         // A scratch VM reads the new version first, so a mistake never replaces what is running.
-        let probe = vm::start(&id, sources.clone(), &Rc::new(Shared::default()));
-        let described = vm::describe(&probe).and_then(|v| Index::from_describe(&v)).and_then(|index| Self::check_index(&manifest, &index).map(|()| index));
-        drop(probe);
+        let luau_index = if luau {
+            let probe = vm::start(&id, sources.clone(), &Rc::new(Shared::default()));
+            let described = vm::describe(&probe).and_then(|v| Index::from_describe(&v));
+            drop(probe);
+            described
+        } else {
+            Ok(Index::default())
+        };
+        let described = luau_index
+            .and_then(|index| match &component {
+                Some((_, wasm_index, _)) => merge(index, wasm_index),
+                None => Ok(index),
+            })
+            .and_then(|index| Self::check_index(&manifest, &index).map(|()| index));
         let index = match described {
             Ok(index) => index,
             Err(error) => {
@@ -583,7 +613,7 @@ impl Runtime {
                 return Some(id);
             }
         };
-        let script = match self.packs.get_mut(&id).and_then(|p| p.script.take()) {
+        let script = match self.packs.get_mut(&id).and_then(|p| p.script.take()).filter(|_| luau) {
             Some(script) => match script.reload(sources) {
                 Ok(_) => Some(script),
                 Err(e) => {
@@ -592,13 +622,13 @@ impl Runtime {
                     return Some(id);
                 }
             },
-            None if eager => Some(self.spawn_vm(&id, sources)),
+            None if eager && luau => Some(self.spawn_vm(&id, sources)),
             None => None,
         };
-        if !self.ephemeral {
+        if !self.ephemeral && !rust {
             super::cache::write(&id, stamp, &index);
         }
-        self.install(id.clone(), dir, manifest, index, script, system, stamp, started);
+        self.install(id.clone(), dir, manifest, index, script, component.map(|(m, i, _)| (m, i)), system, stamp, started);
         Some(id)
     }
 
