@@ -125,6 +125,8 @@ pub enum Responder {
     Luau(Completer),
     /// Settle the resource with this key.
     Resource(String),
+    /// A worker thread is waiting: an AI tool loop calling an ability.
+    Channel(Sender<Result<Value>>),
     Drop,
 }
 
@@ -175,6 +177,8 @@ struct Frame {
     output: Option<Type>,
     /// A pack ability with its own `undo`.
     own_undo: Option<(String, bool)>,
+    /// The pack a built-in is running for: what it calls, it calls with that pack's grants.
+    on_behalf: String,
     /// An effect with no undo of its own: it may not call a final.
     no_undo: bool,
     /// A person started it, so it becomes a Timeline row.
