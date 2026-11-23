@@ -48,6 +48,8 @@ pub struct ScriptOptions {
     pub(crate) text: TextStyle,
     /// `weight = "regular"`, `"medium"`, `"semibold"` and `"bold"`.
     pub(crate) weights: [f32; 4],
+    /// The built-in modules a VM may require (`@rune/ui`, `@rune/signal`); `None` is all of them.
+    pub(crate) modules: Option<Vec<String>>,
 }
 
 impl Default for ScriptOptions {
@@ -65,6 +67,7 @@ impl Default for ScriptOptions {
             on_log: None,
             text: TextStyle::new(13.0, 400.0),
             weights: [400.0, 500.0, 600.0, 700.0],
+            modules: None,
         }
     }
 }
@@ -130,6 +133,15 @@ impl ScriptOptions {
     pub fn text(mut self, base: TextStyle, weights: [f32; 4]) -> Self {
         self.text = base;
         self.weights = weights;
+        self
+    }
+
+    /// Only these built-in modules can be required (`["@rune/signal"]`); the others aren't
+    /// there, so `require("@rune/ui")` fails as an unknown module. A host whose scripts must
+    /// describe rather than draw leaves `@rune/ui` out and gives its own module instead.
+    /// Every built-in is there unless this is called.
+    pub fn modules<'a>(mut self, names: impl IntoIterator<Item = &'a str>) -> Self {
+        self.modules = Some(names.into_iter().map(String::from).collect());
         self
     }
 

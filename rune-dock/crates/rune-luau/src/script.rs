@@ -470,7 +470,7 @@ impl Inner {
                 i.log(level, &message);
             }
         });
-        Base::new(Setup { shared: &self.shared, memory_limit: self.options.memory_limit, nodes: &self.options.nodes, host: self.options.setup.as_deref(), log })
+        Base::new(Setup { shared: &self.shared, memory_limit: self.options.memory_limit, nodes: &self.options.nodes, host: self.options.setup.as_deref(), log, modules: self.options.modules.as_deref() })
     }
 
     pub(crate) fn prewarm(&self) {

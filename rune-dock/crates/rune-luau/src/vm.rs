@@ -114,6 +114,7 @@ pub(crate) struct Setup<'a> {
     pub(crate) nodes: &'a [HostNode],
     pub(crate) host: Option<&'a crate::options::SetupFn>,
     pub(crate) log: Rc<dyn Fn(LogLevel, String)>,
+    pub(crate) modules: Option<&'a [String]>,
 }
 
 /// A VM before its script: the Luau state with the prelude, `@rune/ui` and the host's bindings,
@@ -151,7 +152,10 @@ impl Base {
         globals.raw_set("task", task)?;
         let signal = lua.create_table()?;
         signal.raw_set("new", prelude.get::<Function>("scriptSignal")?)?;
-        lua.register_module("@rune/signal", signal)?;
+        let allowed = |name: &str| setup.modules.is_none_or(|m| m.iter().any(|n| n == name));
+        if allowed("@rune/signal") {
+            lua.register_module("@rune/signal", signal)?;
+        }
         for (name, level) in [("print", LogLevel::Info), ("warn", LogLevel::Warn)] {
             let log = setup.log.clone();
             let f = lua.create_function(move |_, args: MultiValue| {
@@ -177,7 +181,9 @@ impl Base {
             };
             ui.raw_set(node.name.as_str(), f)?;
         }
-        lua.register_module("@rune/ui", &ui)?;
+        if allowed("@rune/ui") {
+            lua.register_module("@rune/ui", &ui)?;
+        }
         let view = lua.create_table()?;
         // SAFETY: as for the builtins.
         unsafe {
