@@ -13,6 +13,7 @@ use super::index::Kind;
 use super::manifest::Permissions;
 use super::types::Type;
 
+pub mod ai;
 mod calc;
 mod clipboard;
 mod desk;
@@ -209,6 +210,7 @@ pub fn all() -> Vec<Spec> {
     exec::register(&mut out);
     fs::register(&mut out);
     system::register(&mut out);
+    ai::register(&mut out);
     wrap::fixed(&mut out);
     out
 }
@@ -220,10 +222,17 @@ pub fn find(address: &str) -> Option<Spec> {
 
 /// Built-ins made from what the user already has: scripts, snippets, quicklinks.
 pub fn dynamic() -> Vec<Spec> {
-    wrap::dynamic()
+    let mut out = wrap::dynamic();
+    ai::presets(&mut out);
+    out
 }
 
 pub fn find_dynamic(address: &str) -> Option<Spec> {
+    if address.starts_with("ai.preset.") {
+        let mut out = Vec::new();
+        ai::presets(&mut out);
+        return out.into_iter().find(|s| s.address == address);
+    }
     wrap::find(address)
 }
 
