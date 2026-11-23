@@ -208,7 +208,16 @@ impl App {
             let scope = self.settings.files.clone();
             self.files.request(&query, &scope);
         }
+        let depth = self.screens.len() - 1;
+        if route == Route::Root {
+            // Packs answer what is typed before the rows are ranked.
+            self.packs.answer(&query);
+        }
         let built = match route {
+            Route::Pack { pack, target, args } => crate::packs::host::build(self, depth, &pack, &target, &args, &query, filter),
+            Route::Packs => crate::packs::host::manage(self, &query),
+            Route::PackGrants(id) => crate::packs::host::grants(self, &id),
+            Route::PackSend => crate::packs::host::send(self, &query),
             Route::Root => features::root::build(self, &query),
             Route::Clipboard => features::clipboard::build(self, &query, filter),
             Route::Emoji => features::emoji::build(self, &query, filter),
