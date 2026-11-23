@@ -1185,6 +1185,56 @@ impl Runtime {
         script.call(entry, all).map_err(|e| vm::script_error(&e))
     }
 
+    /// Runs an entry in a Rust pack's component, on a worker. What it reaches for comes back here
+    /// as messages: a call starts under this one's frame, so it runs as this pack with its grants.
+    fn enter_wasm(&mut self, pack: &str, token: u64, entry: &str, name: &str, args: Vec<Data>) -> Result<()> {
+        let module = self.packs.get(pack).and_then(|p| p.wasm.clone()).expect("in_wasm checked");
+        let values: Vec<Value> = args.iter().skip(1).map(from_data).collect();
+        let (input, output) = match entry {
+            "__undo" => (values.first().cloned().unwrap_or(Value::Null), values.get(1).cloned().unwrap_or(Value::Null)),
+            _ => (values.first().cloned().unwrap_or(Value::Null), Value::Null),
+        };
+        let entry = entry.trim_start_matches("__").to_string();
+        let dry = self.frames.get(&token).is_some_and(|f| f.dry);
+        let (tx, waker, pack, name) = (self.worker_tx.clone(), self.waker.clone(), pack.to_string(), name.to_string());
+        let wake = {
+            let waker = waker.clone();
+            move || {
+                if let Some(w) = waker.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                    w();
+                }
+            }
+        };
+        let calls = {
+            let (call_tx, put_tx, log_tx) = (tx.clone(), tx.clone(), tx.clone());
+            let (wake_call, wake_put, wake_log, log_pack) = (wake.clone(), wake.clone(), wake.clone(), pack.clone());
+            super::wasm::Calls {
+                call: Box::new(move |address: &str, input: Value| {
+                    let (reply, answer) = channel();
+                    call_tx.send(WorkerMsg::Call(token, address.to_string(), input, reply)).map_err(|_| PackError::new("E0900", "EchoSpot is shutting down"))?;
+                    wake_call();
+                    answer.recv_timeout(Duration::from_secs(120)).unwrap_or_else(|_| Err(PackError::new("E0900", format!("{address} gave no answer in 120 s"))))
+                }),
+                put: Box::new(move |store: &str, value: Value| {
+                    let (reply, answer) = channel();
+                    put_tx.send(WorkerMsg::Put(token, store.to_string(), value, reply)).map_err(|_| PackError::new("E0900", "EchoSpot is shutting down"))?;
+                    wake_put();
+                    answer.recv().unwrap_or_else(|_| Err(PackError::new("E0900", "EchoSpot is shutting down")))
+                }),
+                log: Box::new(move |level, text| {
+                    let _ = log_tx.send(WorkerMsg::Log(log_pack.clone(), level, text));
+                    wake_log();
+                }),
+            }
+        };
+        std::thread::Builder::new().name("echospot-pack-wasm".into()).spawn(move || {
+            let result = module.run(&pack, dry, &entry, &name, &input, &output, calls).and_then(Done::value);
+            let _ = tx.send(WorkerMsg::Done(token, result));
+            wake();
+        }).map_err(|_| PackError::new("E0900", "couldn't start a worker for the call"))?;
+        Ok(())
+    }
+
     /// A call came to its end: check the output, record the undo, write the log, answer.
     fn finish(&mut self, token: u64, result: Result<Done>) {
         let Some(mut frame) = self.frames.remove(&token) else { return };
