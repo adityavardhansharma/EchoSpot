@@ -71,6 +71,9 @@ pub struct Pane<'a> {
     pub dark: bool,
     pub level: Level,
     pub shot: &'a Shot,
+    /// The see-through feed this window's frames go to (`seethrough`), when the backdrop is
+    /// the live screen: the glass is drawn translucent and every frame is read back.
+    pub through: Option<&'static str>,
 }
 
 /// A window's state that can stand on Liquid Glass. `None` draws the window as Rune would.
