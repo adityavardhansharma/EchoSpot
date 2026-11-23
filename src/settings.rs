@@ -45,11 +45,13 @@ pub struct Settings {
     /// The Liquid theme's glass.
     pub liquid: crate::glass::Level,
     pub files: FileSearch,
+    /// The Look a pack is drawn under when it names none: "glass", "ink" or "ember".
+    pub pack_look: String,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false, liquid: Default::default(), files: Default::default() }
+        Self { appearance: "dark".into(), hide_on_blur: true, clipboard_history: true, top_margin: 0.18, animations: true, backdrop: "capture".into(), currency: String::new(), ai: Default::default(), calendars: Vec::new(), snippet_expansion: false, liquid: Default::default(), files: Default::default(), pack_look: "glass".into() }
     }
 }
 
