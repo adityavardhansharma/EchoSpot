@@ -106,8 +106,48 @@ pub enum Act {
     Backup(BackupOp),
     /// Open Settings at a pane.
     OpenSettings(String),
+    /// Something a pack's row, action or surface asks for: `packs::host::perform` runs it.
+    Pack(PackOp),
     Toast(String),
     Quit,
+}
+
+/// What the host does for packs. Every one of these starts in EchoSpot's own window, from a key
+/// or a click: nothing an agent can type reaches `Grant`.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PackOp {
+    /// Pick an ability: its form when it needs input, its panel when it reads, a run otherwise.
+    Invoke { address: String, args: serde_json::Value },
+    /// Run an ability now, with this input.
+    Run { address: String, input: serde_json::Value },
+    /// Show a target of a pack: `ability:<name>:<face>`, `surface:<name>`, `board:<name>`.
+    Open { pack: String, target: String, args: serde_json::Value },
+    /// A function a drawn surface holds: an action's `run`, a form's `submit`.
+    Handler { pack: String, target: String, handler: u64, payload: serde_json::Value },
+    /// A verb on a value: `open`, `copy`… or `<pack>.verbs.<name>`.
+    Verb { id: String, value: serde_json::Value },
+    /// Every ability that takes this value.
+    SendTo { value: serde_json::Value, ty: serde_json::Value },
+    Send { address: String, slot: String, value: serde_json::Value, ready: bool },
+    /// The permission screen, and a person's answers on it.
+    Review(String),
+    Grant(String),
+    Revoke(String),
+    CopyError(String),
+    Undo(u64),
+    /// Every pack, its state and what it may do.
+    Manage,
+    /// Show or hide an overlay, a widget or a window a pack declares.
+    Surface { pack: String, name: String },
+    /// Shows a pack's board in its own window (`window`) or on the desktop, or hides it there.
+    Board { pack: String, name: String, window: bool },
+    /// Point and say: note what is on screen for the next agent session.
+    Report,
+    /// Keep an AI answer's surface as a pack of its own.
+    Keep,
+    /// Ask before or stop asking before a final ability runs.
+    Confirming { address: String, ask: bool },
+    Reload,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -246,6 +286,14 @@ pub enum Route {
     Form,
     /// A running extension command; the session owns the tree.
     Ext(u64),
+    /// A pack's surface: the host draws the blocks it returns.
+    Pack { pack: String, target: String, args: serde_json::Value },
+    /// Every pack: its state, its permissions, what it runs unasked.
+    Packs,
+    /// What a pack asks for, to grant or not.
+    PackGrants(String),
+    /// Send to…: the abilities that take the value in hand.
+    PackSend,
 }
 
 #[derive(Clone, Debug, Default)]
