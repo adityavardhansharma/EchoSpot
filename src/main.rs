@@ -37,12 +37,14 @@ fn setup(s: &mut App, waker: Waker) {
         features::calc::set_home_currency(&s.settings.currency);
     }
     features::calc::warm();
+    s.packs.rt.set_waker(waker.clone());
     s.chat.configure(waker);
 }
 
 fn poll(s: &mut App, clock: f64, tx: &mut Tx) -> bool {
     s.clock = clock;
     let mut changed = ext::poll(s, tx);
+    changed |= packs::host::poll(s, tx);
     // Fresh exchange rates turn a waiting currency query into an answer.
     if features::calc::take_dirty() {
         s.refresh_keeping();
@@ -170,6 +172,12 @@ fn main() {
     app = app.init(move || {
         let mut state = App::new();
         state.me = Some(me);
+        state.packs.headless = headless;
+        if let Some(spec) = &pack_snap {
+            packs::host::snap(&mut state, spec);
+        } else {
+            state.packs.reload(true);
+        }
         if !headless {
             state.bindings.apply();
         }
