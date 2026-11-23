@@ -1598,6 +1598,42 @@ impl Runtime {
                             self.shared.bump();
                         }
                     }
+                    WorkerMsg::Call(parent, address, input, reply) => {
+                        if self.frames.contains_key(&parent) {
+                            self.start(Origin::Frame(parent), &address, input, Responder::Channel(reply), false);
+                        } else {
+                            let _ = reply.send(Err(PackError::new("E0900", "the call this belonged to has ended")));
+                        }
+                    }
+                    WorkerMsg::Put(token, name, value, reply) => {
+                        let _ = reply.send(self.put_store(token, &name, value));
+                    }
+                    WorkerMsg::Log(pack, level, text) => self.shared.log(&pack, level, text),
+                    WorkerMsg::Building(dir, label) => {
+                        if let Some(pack) = self.packs.values_mut().find(|p| p.dir == dir) {
+                            pack.building = Some(label);
+                            self.events.push(Event::PacksChanged);
+                        }
+                    }
+                    WorkerMsg::Built(dir, result) => {
+                        self.builds.remove(&dir);
+                        if let Some(pack) = self.packs.values_mut().find(|p| p.dir == dir) {
+                            pack.building = None;
+                        }
+                        match result {
+                            // Loads it again, now that the component is current.
+                            Ok(_) => {
+                                self.load(&dir, false);
+                                self.check_dependencies();
+                            }
+                            Err(error) => {
+                                let found = self.packs.values().find(|p| p.dir == dir).map(|p| (p.id.clone(), p.manifest.clone(), p.system));
+                                if let Some((id, manifest, system)) = found {
+                                    self.fail(&id, &dir, manifest, error, system);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             let now = self.shared.clock();
