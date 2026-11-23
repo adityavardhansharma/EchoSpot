@@ -22,7 +22,7 @@ pub const UI: &str = include_str!("luau/ui.luau");
 const ENTRY: &str = "__pack.luau";
 
 /// Folders that aren't part of the running pack.
-const APART: &[&str] = &["tests", "scenes", "fixtures", "inbox", "icons", ".git"];
+const APART: &[&str] = &["tests", "scenes", "fixtures", "inbox", "icons", ".git", "target"];
 
 /// Names `echo` answers to, for "did you mean".
 pub const ECHO_NAMES: &[&str] = &[
@@ -55,7 +55,10 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) {
             if !(rel.is_empty() && APART.contains(&name)) && !name.starts_with('.') {
                 walk(&path, &child, out);
             }
-        } else if name.ends_with(".luau") || name == ".luaurc" {
+        } else if name.ends_with(".d.luau") || name == ".luaurc" {
+            // Type definitions are for an editor, and the editor's aliases would shadow the
+            // modules the host provides.
+        } else if name.ends_with(".luau") {
             out.push((child, path));
         }
     }
