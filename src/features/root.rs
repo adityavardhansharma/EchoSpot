@@ -182,6 +182,15 @@ fn entries(app: &App) -> Vec<Entry> {
     }
     out.extend(crate::ext::commands(app).into_iter().map(|(item, keywords)| Entry { item, keywords }));
     out.extend(crate::features::scripts::rows(app).into_iter().map(|(item, keywords)| Entry { item, keywords }));
+    for (mut item, keywords) in crate::packs::host::rows(app) {
+        let id = item.id.clone();
+        // A row that says where a pack stands isn't something to favour.
+        if !item.trailing.eq("Pack") {
+            let at = item.actions.len().min(1);
+            item.actions.insert(at, favorite_action(app, &id));
+        }
+        out.push(Entry { item, keywords });
+    }
     // Any row can carry an alias and a global hotkey.
     for e in &mut out {
         let id = e.item.id.clone();
@@ -265,12 +274,15 @@ pub fn build(app: &App, query: &str) -> Built {
         commands.extend(rest("Window"));
         let extensions: Vec<Item> = all.iter()
             .filter(|e| e.item.id.starts_with("ext:") && !shown.contains(e.item.id.as_str())).map(|e| e.item.clone()).collect();
+        let packs: Vec<Item> = all.iter().filter(|e| e.item.id.starts_with("pack:") && !shown.contains(e.item.id.as_str())).map(|e| e.item.clone()).collect();
         sections.push("Up Next", crate::features::calendar::up_next(app));
         sections.push("Favorites", favorites);
         sections.push("Suggestions", suggestions);
         sections.push("Applications", applications);
         sections.push("Extensions", extensions);
-        sections.push("Commands", commands.into_iter().filter(|i| !i.id.starts_with("ext:")).collect());
+        sections.push("Packs", packs);
+        sections.push("Pinned", crate::packs::host::pinned(app));
+        sections.push("Commands", commands.into_iter().filter(|i| !i.id.starts_with("ext:") && !i.id.starts_with("pack:")).collect());
         return Built::list(sections, "Search for apps and commands...");
     }
 
