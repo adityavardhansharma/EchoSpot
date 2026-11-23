@@ -116,6 +116,7 @@ fn main() {
             None => eprintln!("echospot commands: needs a running EchoSpot."),
         },
         "mcp" => return match args.get(1).map(String::as_str) {
+            Some("serve") => packs::mcp::serve(),
             Some("call") => features::mcp::cli_call(args.get(2).map(String::as_str).unwrap_or(""), args.get(3).map(String::as_str).unwrap_or("{}")),
             _ => features::mcp::cli(),
         },
