@@ -134,6 +134,16 @@ pub fn serve(handle: AppHandle<App>) {
                         handle.open();
                     }
                 }
+                // Something happened that packs may listen for: `event clipboard.changed`.
+                Some("event") => {
+                    let name = words.next().unwrap_or("").to_string();
+                    if crate::packs::index::EVENTS.contains(&name.as_str()) {
+                        handle.update_if(move |s, _| {
+                            s.packs.emit(&name, serde_json::json!({}));
+                            false
+                        });
+                    }
+                }
                 Some("settings") => crate::settings_ui::open(words.next().unwrap_or("")),
                 Some("reload") => handle.update(|s, _| s.reload_stores()),
                 Some("quit") => handle.quit(),

@@ -90,7 +90,12 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let command = args.first().map(String::as_str).unwrap_or("");
     match command {
-        "clip-store" => return features::clipboard::store_from_stdin(args.iter().any(|a| a == "--image")),
+        "clip-store" => {
+            features::clipboard::store_from_stdin(args.iter().any(|a| a == "--image"));
+            // Packs that listen for the clipboard hear of it from the resident palette.
+            ipc::send("event clipboard.changed");
+            return;
+        }
         "toggle" | "show" | "hide" | "quit" | "open" | "settings" => {
             // A resident palette answers; without one, this process becomes it.
             // A headless run (`--snap`, `--script`) draws its own palette and leaves the resident one alone.
