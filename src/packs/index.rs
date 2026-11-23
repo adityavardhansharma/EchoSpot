@@ -115,6 +115,9 @@ pub struct Surface {
 pub struct Tile {
     pub address: String,
     pub args: Value,
+    /// Input fields filled from earlier tiles' outputs, by tile number from 1: `{ events = 1 }`.
+    /// A board can read itself: "summarise my day" takes the calendar tile and the PR tile.
+    pub inputs: BTreeMap<String, usize>,
     pub size: String,
     pub refresh: String,
     pub title: String,
@@ -315,7 +318,14 @@ impl Index {
                 if !fits {
                     return Err(bad(format!("{at}.tiles[{}].size", i + 1), format!("size = {size:?} must be columns x rows on the four-column grid, such as \"2x1\"")));
                 }
-                board.tiles.push(Tile { address, args: tile.get("args").cloned().unwrap_or(Value::Null), size, refresh: text(tile, "refresh"), title: text(tile, "title"), face: text(tile, "face") });
+                let mut inputs = BTreeMap::new();
+                for (field, from) in tile.get("inputs").and_then(Value::as_object).into_iter().flatten() {
+                    match from.as_u64().map(|n| n as usize) {
+                        Some(n) if n >= 1 && n <= i => { inputs.insert(field.clone(), n); }
+                        _ => return Err(bad(format!("{at}.tiles[{}].inputs.{field}", i + 1), format!("inputs.{field} = {from} must name an earlier tile by its number, 1 to {i}: a tile reads only what is above it"))),
+                    }
+                }
+                board.tiles.push(Tile { address, args: tile.get("args").cloned().unwrap_or(Value::Null), inputs, size, refresh: text(tile, "refresh"), title: text(tile, "title"), face: text(tile, "face") });
             }
             index.boards.insert(name.clone(), board);
         }

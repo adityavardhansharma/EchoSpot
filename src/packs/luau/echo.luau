@@ -245,7 +245,7 @@ local function describe_tiles(tiles: any): { any }
 		if type(tile) == "string" then
 			out[i] = { address = tile }
 		else
-			out[i] = { address = tile[1] or tile.address, args = plain(tile.args, nil, 0), size = tile.size, refresh = tile.refresh, title = tile.title, face = tile.face }
+			out[i] = { address = tile[1] or tile.address, args = plain(tile.args, nil, 0), inputs = plain(tile.inputs, nil, 0), size = tile.size, refresh = tile.refresh, title = tile.title, face = tile.face }
 		end
 	end
 	return out
