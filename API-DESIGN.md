@@ -1,7 +1,9 @@
 # EchoSpot Packs: API Design
 
-Status: design proposal. Nothing here is built yet. Written so that someone who was not in the
-discussion can build it.
+Status: built. Every section below is implemented in `src/packs/` (and the Rust tier in
+`src/packs/wasm/`); `echospot dev docs` documents the installed version. Written so that someone
+who was not in the discussion can build it; where building settled a question the design left
+open, the answer is noted in place and in §25.
 
 ---
 
