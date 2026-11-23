@@ -632,6 +632,62 @@ impl Runtime {
         Some(id)
     }
 
+    /// A Rust pack's component and what it declares, or `None` while a build runs on a thread.
+    fn component(&mut self, id: &str, dir: &Path, manifest: &Manifest, system: bool) -> Result<Option<(Arc<super::wasm::Module>, Index, u64)>> {
+        use super::wasm;
+        if !wasm::ENABLED {
+            return Err(PackError::new("E0207", "this EchoSpot was built without Rust packs (the wasm feature)"));
+        }
+        // What the pack may call, as Rust functions, before the build reads them.
+        wasm::write_calls(dir, &wasm::calls_rs(manifest, &self.specs()));
+        if !wasm::up_to_date(dir) {
+            if let Some(report) = &self.build_inline {
+                let started = Instant::now();
+                wasm::build(dir, &|p| report(p))?;
+                report(&wasm::Progress::default());
+                self.shared.log(id, "info", format!("built in {:.1} s", started.elapsed().as_secs_f64()));
+            } else {
+                self.start_build(id, dir, manifest, system);
+                return Ok(None);
+            }
+        }
+        let module = wasm::Module::load(&wasm::artifact(dir)?)?;
+        let index = wasm::index(&module.describe()?)?;
+        Ok(Some((module, index, wasm::stamp(dir))))
+    }
+
+    /// Builds a Rust pack on a thread. Until it ends the last good version runs, or the pack's
+    /// row shows the build's progress.
+    fn start_build(&mut self, id: &str, dir: &Path, manifest: &Manifest, system: bool) {
+        if !self.builds.insert(dir.to_path_buf()) {
+            return;
+        }
+        match self.packs.get_mut(id) {
+            Some(pack) => pack.building = Some("Building".into()),
+            None => {
+                self.packs.insert(id.to_string(), Pack {
+                    id: id.into(), dir: dir.into(), manifest: manifest.clone(), state: State::Checking, error: None, index: Index::default(), script: None, system,
+                    stamp: 0, load_ms: 0.0, stale: false, wasm: None, wasm_index: Index::default(), building: Some("Building".into()),
+                });
+            }
+        }
+        self.events.push(Event::PacksChanged);
+        let (tx, waker, dir) = (self.worker_tx.clone(), self.waker.clone(), dir.to_path_buf());
+        let wake = move || {
+            if let Some(waker) = waker.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                waker();
+            }
+        };
+        let _ = std::thread::Builder::new().name("echospot-pack-build".into()).spawn(move || {
+            let result = super::wasm::build(&dir, &|p| {
+                let _ = tx.send(WorkerMsg::Building(dir.clone(), p.label()));
+                wake();
+            });
+            let _ = tx.send(WorkerMsg::Built(dir, result));
+            wake();
+        });
+    }
+
     fn spawn_vm(&self, id: &str, sources: rune_luau::Sources) -> Script {
         let script = vm::start(id, sources, &self.shared);
         if let Some(waker) = self.waker.lock().unwrap_or_else(|e| e.into_inner()).clone() {
@@ -641,7 +697,11 @@ impl Runtime {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn install(&mut self, id: String, dir: &Path, manifest: Manifest, index: Index, script: Option<Script>, system: bool, stamp: u64, started: Instant) {
+    fn install(&mut self, id: String, dir: &Path, manifest: Manifest, index: Index, script: Option<Script>, component: Option<(Arc<super::wasm::Module>, Index)>, system: bool, stamp: u64, started: Instant) {
+        let (wasm, wasm_index) = match component {
+            Some((m, i)) => (Some(m), i),
+            None => (None, Index::default()),
+        };
         {
             let mut stores = self.shared.stores.borrow_mut();
             for (name, decl) in &index.stores {
@@ -652,7 +712,7 @@ impl Runtime {
             stores.retain(&id, &index.stores.keys().collect::<Vec<_>>());
         }
         let load_ms = started.elapsed().as_secs_f64() * 1e3;
-        self.packs.insert(id.clone(), Pack { id: id.clone(), dir: dir.into(), manifest, state: State::Ready, error: None, index, script, system, stamp, load_ms, stale: false });
+        self.packs.insert(id.clone(), Pack { id: id.clone(), dir: dir.into(), manifest, state: State::Ready, error: None, index, script, system, stamp, load_ms, stale: false, wasm, wasm_index, building: None });
         self.settle_state(&id);
         self.shared.invalidate(&id);
         self.shared.log(&id, "info", format!("loaded in {load_ms:.1} ms"));

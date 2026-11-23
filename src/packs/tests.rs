@@ -15,6 +15,9 @@ pub fn isolate() {
         let _ = std::fs::remove_dir_all(&dir);
         // Safety: set once, before any test thread reads it.
         unsafe { std::env::set_var("ECHOSPOT_PACKS_STATE", &dir) };
+        // Rust packs' builds share one folder that outlives the run, so only the first builds the crates they use.
+        // Safety: as above.
+        unsafe { std::env::set_var("ECHOSPOT_RUST_TARGET", std::env::temp_dir().join("echospot-test-rust-target")) };
         crate::features::calc::currency::set_test_rates();
     });
 }
