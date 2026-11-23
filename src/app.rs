@@ -535,6 +535,7 @@ impl App {
             Action::new("AI Chat", &icons::AI, Act::Ai(AiOp::Open(String::new()))),
             Action::new("Extension Store", &icons::STORE, Act::Push(Route::Store)),
             Action::new("Manage Extensions", &icons::PUZZLE, Act::Push(Route::Extensions)),
+            Action::new("Manage Packs", &icons::BOX, Act::Pack(PackOp::Manage)),
             Action::new("Reload Applications", &icons::REFRESH, Act::Toast("reload".into())),
             Action::new("Keyboard Shortcuts", &icons::KEYBOARD, Act::OpenSettings("shortcuts".into())).section(""),
             Action::new("About EchoSpot", &icons::LOGO, Act::OpenSettings("about".into())),
