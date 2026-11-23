@@ -1226,6 +1226,46 @@ impl Runtime {
         built.map(|d| from_data(&d)).map_err(|e| vm::script_error(&e))
     }
 
+    /// What an address returns for these arguments, as a surface the host draws needs it: at
+    /// once from the cache, pending while it loads. `fresh_for` makes a board tile load again
+    /// after that many seconds. Only reads load this way; anything else is an action.
+    pub fn resource(&mut self, address: &str, input: &Value, fresh_for: Option<f64>) -> Resource {
+        if let Some(scene) = self.shared.scene.borrow().as_ref() {
+            if let Some(value) = scene.load.get(address) {
+                return Resource::ok(value.clone(), None);
+            }
+            if let Some(message) = scene.errors.get(address) {
+                return Resource { state: "error", error: Some(PackError::new("E0203", message.as_str().unwrap_or("failed"))), ..Resource::pending() };
+            }
+            if scene.pending.contains(address) {
+                return Resource::pending();
+            }
+        }
+        let key = Shared::resource_key("", address, input);
+        let now = self.shared.clock();
+        let found = self.shared.resources.borrow().get(&key).cloned();
+        let ttl = |r: &Resource| match (fresh_for, r.ttl > 0.0) {
+            (Some(tile), true) => tile.min(r.ttl),
+            (Some(tile), false) => tile,
+            (None, _) => r.ttl,
+        };
+        match found {
+            Some(r) if r.state == "pending" || ttl(&r) <= 0.0 || now - r.at < ttl(&r) => r,
+            stale => {
+                let mut pending = stale.unwrap_or_else(Resource::pending);
+                pending.at = now;
+                if pending.state != "ok" {
+                    pending = Resource::pending();
+                    pending.at = now;
+                }
+                self.shared.resources.borrow_mut().insert(key.clone(), pending.clone());
+                self.start(Origin::Load(String::new()), address, input.clone(), Responder::Resource(key), false);
+                // A built-in that answers at once has already settled it.
+                self.shared.resources.borrow().get(&Shared::resource_key("", address, input)).cloned().unwrap_or(pending)
+            }
+        }
+    }
+
     /// Every `query(text, cx)` of a pack, within its share of a keystroke.
     pub fn query(&mut self, pack: &str, text: &str) -> Vec<(String, Value)> {
         let has = self.packs.get(pack).is_some_and(|p| p.state == State::Ready && p.index.abilities.values().any(|a| a.has_query));
