@@ -142,6 +142,8 @@ pub struct SettingsUi {
     recording: Option<String>,
     held: Mods,
     record_error: String,
+    /// The packs as the palette's runtime last described them (API-DESIGN.md §9.1, §12, §15, §23).
+    packs: crate::packs::host::Snapshot,
 }
 
 fn row_key(id: &str) -> String {
@@ -163,7 +165,7 @@ impl SettingsUi {
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
             selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
-            recording: None, held: Mods::default(), record_error: String::new(),
+            recording: None, held: Mods::default(), record_error: String::new(), packs: Default::default(),
         };
         ui.reload();
         ui
@@ -238,6 +240,9 @@ impl SettingsUi {
         self.filter.focused = pane == Pane::Commands && self.reveal.is_none();
         if pane == Pane::Commands {
             self.load_commands();
+        }
+        if pane == Pane::Packs {
+            self.load_packs();
         }
         if pane == Pane::Ai && self.probe == Probe::Idle && self.settings.ai.ready() {
             self.test_connection();
@@ -338,6 +343,38 @@ impl SettingsUi {
                 handle.update(move |ui, tx| ui.take_commands(list, tx));
             }
         });
+    }
+
+    // ---- Packs ----
+
+    /// Asks the palette how its packs stand: only its runtime knows what each holds and did.
+    fn load_packs(&mut self) {
+        // What is on disk, at once, with the grants read and never written; the palette's live
+        // view (what its VMs have cost, what ran) replaces it when it answers.
+        let mut host = crate::packs::host::Host::new();
+        host.headless = true;
+        host.rt.grants = crate::packs::grants::Grants::load().read_only();
+        host.rt.load_all();
+        self.packs = crate::packs::host::snapshot(&host);
+        let Some(main) = MAIN.get() else { return };
+        main.update(|app: &mut App, _| {
+            // Settings can open before the palette has read its packs.
+            if app.packs.rt.packs.is_empty() {
+                app.packs.reload(true);
+            }
+            let snapshot = crate::packs::host::snapshot(&app.packs);
+            if let Some((handle, _)) = WINDOW.get() {
+                handle.update(move |ui, _| ui.packs = snapshot);
+            }
+        });
+    }
+
+    /// Takes back one permission, or all of a pack's. A person's click, in EchoSpot's own window,
+    /// as granting is; the pack keeps running and asks again for what it lost.
+    fn revoke(&mut self, pack: String, ask: Option<crate::packs::manifest::Ask>) {
+        let Some(main) = MAIN.get() else { return };
+        main.update(move |app: &mut App, _| app.packs.rt.revoke(&pack, ask.as_ref()));
+        self.load_packs();
     }
 
     fn take_commands(&mut self, list: Vec<Command>, tx: &mut Tx) {
