@@ -396,7 +396,11 @@ impl App {
             if let Some((w, h, rgba)) = crate::backdrop::capture(self.settings.top_margin) {
                 self.set_backdrop(w, h, rgba);
             }
-            crate::live::start_palette();
+            // Liquid bends the live screen (see-through capture); Blur, or a compositor without
+            // the standard capture protocol, follows it the older way.
+            if !(self.settings.liquid() && crate::seethrough::start("palette")) {
+                crate::live::start_palette();
+            }
         }
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
         self.scripts = features::scripts::load();
@@ -1011,8 +1015,9 @@ impl crate::glass::Liquid for App {
     fn pane(&self) -> Option<crate::glass::Pane<'_>> {
         self.settings.liquid().then(|| crate::glass::Pane {
             window: (crate::theme::size::WINDOW_W, crate::theme::size::WINDOW_H),
-            dark: self.system_dark.get(), level: self.settings.liquid,
+            dark: self.settings.dark(self.system_dark.get()), level: self.settings.liquid,
             shot: &self.glass,
+            through: crate::seethrough::live("palette").then_some("palette"),
         })
     }
 }
