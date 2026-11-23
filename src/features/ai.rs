@@ -383,6 +383,8 @@ pub struct Chat {
     rx: Option<Receiver<Chunk>>,
     control: Control,
     waker: Option<Waker>,
+    /// Pack abilities the model may call while tools are on, each through the broker.
+    pub toolbox: ai_wire::Toolbox,
 }
 
 const DEFAULT_SYSTEM: &str = "You are answering inside a small command palette. Be direct and brief: lead with the answer, use short paragraphs, and use Markdown (lists, code fences) only where it helps.";
@@ -489,12 +491,13 @@ impl Chat {
         let waker = self.waker.clone();
         self.control = Control::default();
         let control = self.control.clone();
+        let extra = if settings.tools { self.toolbox.clone() } else { ai_wire::Toolbox::default() };
         let started = std::thread::Builder::new().name("echospot-ai".into()).spawn(move || {
-            ai_wire::run(job, tx, || {
+            ai_wire::run_with(job, tx, || {
                 if let Some(waker) = &waker {
                     waker();
                 }
-            }, control);
+            }, control, extra);
         });
         if started.is_err() {
             self.error = Some("Could not start the request.".into());

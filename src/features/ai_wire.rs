@@ -353,12 +353,35 @@ enum Turn {
 
 /// Runs a question to its end on a worker thread: stream the answer, and for as long as the
 /// model asks for tools, run them and ask again with what they returned.
-pub fn run(mut job: Job, tx: Sender<Chunk>, wake: impl Fn(), control: Control) {
+pub fn run(job: Job, tx: Sender<Chunk>, wake: impl Fn(), control: Control) {
+    run_with(job, tx, wake, control, Toolbox::default())
+}
+
+/// Tools beside the MCP servers': pack abilities, each call going through the broker.
+#[derive(Clone, Default)]
+pub struct Toolbox {
+    pub tools: Vec<mcp::Tool>,
+    pub call: Option<Arc<dyn Fn(&str, &Value) -> Result<String, String> + Send + Sync>>,
+}
+
+/// [`run`], with more tools on offer than the MCP servers'.
+pub fn run_with(mut job: Job, tx: Sender<Chunk>, wake: impl Fn(), control: Control, extra: Toolbox) {
     let send = |chunk: Chunk| {
         let _ = tx.send(chunk);
         wake();
     };
     let mut tools: Vec<mcp::Tool> = Vec::new();
+    if !extra.tools.is_empty() {
+        let definitions: Vec<Value> = extra.tools.iter().map(|t| if job.anthropic {
+            json!({ "name": t.wire, "description": t.description, "input_schema": t.schema })
+        } else {
+            json!({ "type": "function", "function": { "name": t.wire, "description": t.description, "parameters": t.schema } })
+        }).collect();
+        match job.body.get_mut("tools").and_then(Value::as_array_mut) {
+            Some(list) => list.extend(definitions),
+            None => job.body["tools"] = Value::Array(definitions),
+        }
+    }
     if job.tools {
         send(Chunk::Status("Starting tools…".into()));
         let (found, problems) = mcp::tools();
@@ -454,7 +477,11 @@ pub fn run(mut job: Job, tx: Sender<Chunk>, wake: impl Fn(), control: Control) {
         for call in &calls {
             send(Chunk::Status(format!("Using {}…", pretty_tool(&call.name))));
             let known = tools.iter().any(|t| t.wire == call.name);
-            let outcome = if known { mcp::call(&call.name, &call.input) } else { Err(format!("There is no tool named {}.", call.name)) };
+            let outcome = match (&extra.call, extra.tools.iter().any(|t| t.wire == call.name)) {
+                (Some(run), true) => run(&call.name, &call.input),
+                _ if known => mcp::call(&call.name, &call.input),
+                _ => Err(format!("There is no tool named {}.", call.name)),
+            };
             send(Chunk::Text(format!("{}*{} {}*\n\n", if round == 0 && results.is_empty() { "" } else { "\n\n" }, if outcome.is_ok() { "Used" } else { "Could not use" }, pretty_tool(&call.name))));
             let (text, is_error) = match outcome {
                 Ok(text) => (if text.is_empty() { "(no output)".to_string() } else { util::truncate(&text, 100_000) }, false),
