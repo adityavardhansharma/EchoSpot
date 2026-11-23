@@ -418,6 +418,9 @@ impl<S: 'static> Host<S> {
         #[cfg(feature = "frame-profile")]
         let fp_encoded = fp_start.map(|_| crate::frame::live_log::Stamp::now());
         renderer.submit(&gpu.queue, enc);
+        if let Some(c) = self.comp.as_mut() {
+            c.submitted(&gpu.device, &gpu.queue);
+        }
         #[cfg(feature = "frame-profile")]
         let fp_submitted = fp_start.map(|_| crate::frame::live_log::Stamp::now());
         crate::marks::mark_once(&FIRST_ENCODED, "frame.first.encoded");

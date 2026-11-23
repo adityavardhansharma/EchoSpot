@@ -48,6 +48,11 @@ pub trait Compositor<S: 'static>: 'static {
     /// own instance, whose first device has the same id as the last one's (hex#982).
     fn render(&mut self, f: &mut Frame<'_, S>);
 
+    /// Called once the frame `render` recorded has been submitted to the GPU, before it is
+    /// presented. A buffer the frame copied into can be mapped from here (`map_async`), to read
+    /// back what was drawn: what a compositor that needs its own pixels (rune-glass) waits for.
+    fn submitted(&mut self, _device: &wgpu::Device, _queue: &wgpu::Queue) {}
+
     /// True while something the compositor draws moves on its own: the window keeps its display
     /// link running. False lets it go idle (no frames at rest) and rest: a due `wake_after`
     /// runs `poll` alone and draws only when that poll changed something.
