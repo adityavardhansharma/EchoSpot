@@ -60,3 +60,4 @@ pub mod api;
 pub mod verbs;
 pub mod examples;
 pub mod trust;
+pub mod fx;
