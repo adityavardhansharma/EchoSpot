@@ -247,7 +247,9 @@ fn bind(host: &Host<'_>, shared: &Rc<Shared>, id: &str) -> mlua::Result<()> {
 pub fn start(id: &str, sources: Sources, shared: &Rc<Shared>) -> Script {
     let (setup_shared, setup_id) = (shared.clone(), id.to_string());
     let (log_shared, log_id) = (shared.clone(), id.to_string());
+    // A pack describes, it doesn't draw (§2.1): `@echo/ui` is its UI, and raw `@rune/ui` isn't there.
     let options = ScriptOptions::new()
+        .modules(["@rune/signal"])
         .setup(move |host| bind(host, &setup_shared, &setup_id))
         .on_log(move |level, text| {
             let level = match level {
