@@ -59,3 +59,4 @@ pub mod graph;
 pub mod api;
 pub mod verbs;
 pub mod examples;
+pub mod trust;
