@@ -78,3 +78,4 @@ pub mod answers;
 pub mod draw;
 pub mod host;
 pub mod slots;
+pub mod cli;

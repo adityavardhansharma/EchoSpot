@@ -117,6 +117,12 @@ fn main() {
             Some(list) => println!("{list}"),
             None => eprintln!("echospot commands: needs a running EchoSpot."),
         },
+        // Packs: what a coding agent builds and checks them with.
+        "dev" => std::process::exit(packs::cli::dev(&args[1..])),
+        "call" => std::process::exit(packs::cli::call(&args[1..])),
+        "bar" => std::process::exit(packs::cli::bar(&args[1..])),
+        "fork" => std::process::exit(packs::cli::fork(&args[1..])),
+        "agent" => std::process::exit(packs::cli::agent(&args[1..])),
         "mcp" => return match args.get(1).map(String::as_str) {
             Some("serve") => packs::mcp::serve(),
             Some("call") => features::mcp::cli_call(args.get(2).map(String::as_str).unwrap_or(""), args.get(3).map(String::as_str).unwrap_or("{}")),
@@ -138,11 +144,14 @@ fn main() {
         }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
-            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snap|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
+            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snap|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot mcp serve    offer every pack ability as an MCP tool, over stdio\n  echospot dev          build and check packs (echospot dev help)\n  echospot call <address> [--json '{{…}}'] call an ability\n  echospot bar <address>                   a JSON line per update, for Waybar\n  echospot fork <id>    copy a system pack into your packs\n  echospot agent install                   write the skill for coding agents\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
         }
         _ => {}
     }
     let headless = args.iter().any(|a| a.starts_with("--snap") || a.starts_with("--tree") || a.starts_with("--script") || a.starts_with("--list"));
+    // `echospot dev render`: one surface of one pack, in a scene, drawn the way the palette would.
+    let pack_snap: Option<serde_json::Value> = (headless && command == "open" && args.get(1).map(String::as_str) == Some("pack"))
+        .then(|| std::env::var(packs::cli::SNAP_ENV).ok()).flatten().and_then(|spec| serde_json::from_str(&spec).ok());
     let show_now = matches!(command, "toggle" | "show" | "open");
     let open_route = (command == "open").then(|| args.get(1).cloned()).flatten();
 
