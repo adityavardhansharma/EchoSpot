@@ -309,6 +309,15 @@ fn item(app: &App, e: &Entry) -> Item {
     if e.kind == Kind::Link {
         actions.push(Action::new("Open in Browser", &icons::GLOBE, Act::OpenUrl(e.text.trim().to_string())).keys("ctrl+o"));
     }
+    // The entry as a typed value: every pack verb for its type, and Send to….
+    let (value, kind) = match e.kind {
+        Kind::Link => (e.text.trim().to_string(), "url"),
+        Kind::File => (first_line.trim_start_matches("file://").to_string(), "file"),
+        Kind::Image => (image_path(&e.text).display().to_string(), "image"),
+        Kind::Color => (e.text.trim().to_string(), "color"),
+        Kind::Text => (e.text.clone(), "text"),
+    };
+    actions.extend(crate::packs::host::pack_verbs(&app.packs.rt, &serde_json::Value::String(value), kind));
     actions.push(Action::new(if e.pinned { "Unpin Entry" } else { "Pin Entry" }, &icons::PIN, Act::Clip(ClipOp::Pin, e.id)).keys("ctrl+shift+p").section(""));
     actions.push(Action::new("Delete Entry", &icons::TRASH, Act::Clip(ClipOp::Delete, e.id)).keys("ctrl+x").destructive());
     actions.push(Action::new("Delete All Entries", &icons::TRASH, Act::Confirm(Box::new(Confirm {

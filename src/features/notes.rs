@@ -72,6 +72,18 @@ pub fn slug(title: &str, taken: &[Note]) -> String {
     id
 }
 
+/// The web links in a note, in order, each once.
+fn links(body: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for word in body.split(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '<' | '>' | '[' | ']' | '"')) {
+        let word = word.trim_end_matches(['.', ',', ';', ':', '!', '?']);
+        if (word.starts_with("https://") || word.starts_with("http://")) && word.len() > 10 && !out.iter().any(|l| l == word) {
+            out.push(word.to_string());
+        }
+    }
+    out
+}
+
 fn create_action(title: &str) -> Action {
     Action::new("Create Note", &icons::PLUS, Act::Note(NoteOp::New(title.to_string())))
 }
@@ -85,7 +97,7 @@ pub fn build(app: &App, query: &str) -> Built {
         let mut detail = Detail { markdown: Some(if n.body.trim().is_empty() { "*Empty note.*".into() } else { util::truncate(&n.body, 6000) }), heading: Some("Information".into()), ..Default::default() };
         detail.fields.push(("Words".into(), words.to_string()));
         detail.fields.push(("Edited".into(), util::ago(n.modified)));
-        let item = Item::new(format!("note:{}", n.id), n.title.clone(), IconSrc::Badge(&icons::FILE_TEXT, Tint::Yellow))
+        let mut item = Item::new(format!("note:{}", n.id), n.title.clone(), IconSrc::Badge(&icons::FILE_TEXT, Tint::Yellow))
             .action(Action::new("Edit Note", &icons::PENCIL, Act::Note(NoteOp::Edit(n.id.clone()))))
             .action(Action::new("Copy Note", &icons::COPY, Act::Copy(n.body.clone())).keys("ctrl+shift+c"))
             .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(n.body.clone())).keys("ctrl+enter"))
@@ -97,6 +109,19 @@ pub fn build(app: &App, query: &str) -> Built {
                 destructive: true, act: Act::Note(NoteOp::Delete(n.id.clone())),
             }))).keys("ctrl+x").destructive())
             .detail(detail);
+        // The note is markdown, and every link in it a url: each brings its packs' verbs (§7.2).
+        let mut verbs = crate::packs::host::pack_verbs(&app.packs.rt, &serde_json::Value::String(n.body.clone()), "markdown");
+        for link in links(&n.body).into_iter().take(3) {
+            let more = crate::packs::host::pack_verbs(&app.packs.rt, &serde_json::Value::String(link.clone()), "url");
+            verbs.extend(more.into_iter().filter(|a| a.title != "Send to…").map(|mut a| {
+                a.title = format!("{} · {}", a.title, util::truncate(&link, 40));
+                a
+            }));
+        }
+        let at = item.actions.len().saturating_sub(2);
+        for (i, action) in verbs.into_iter().enumerate() {
+            item.actions.insert(at + i, action);
+        }
         Some((score, item))
     }).collect();
     scored.sort_by(|a, b| b.0.cmp(&a.0));
