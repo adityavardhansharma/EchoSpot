@@ -1025,14 +1025,14 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
 const LINK_HANDLER: &str = "echospot-url.desktop";
 
 /// Makes EchoSpot what opens `raycast://` links, which is how a provider's sign-in page hands
-/// its code back.
-fn register_link_handler() {
+/// its code back, and `echospot://` links to pack surfaces.
+pub fn register_link_handler() {
     let Some(apps) = util::data_dir().parent().map(|d| d.join("applications")) else { return };
     let _ = std::fs::create_dir_all(&apps);
     let exe = if util::has_program("echospot") { "echospot".to_string() } else {
         std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_else(|_| "echospot".into())
     };
-    let entry = format!("[Desktop Entry]\nType=Application\nName=EchoSpot Links\nExec={exe} url %u\nNoDisplay=true\nTerminal=false\nMimeType=x-scheme-handler/raycast;x-scheme-handler/com.raycast;\n");
+    let entry = format!("[Desktop Entry]\nType=Application\nName=EchoSpot Links\nExec={exe} url %u\nNoDisplay=true\nTerminal=false\nMimeType=x-scheme-handler/raycast;x-scheme-handler/com.raycast;x-scheme-handler/echospot;\n");
     let file = apps.join(LINK_HANDLER);
     if std::fs::read_to_string(&file).ok().as_deref() != Some(entry.as_str()) {
         let _ = std::fs::write(&file, entry);
@@ -1042,13 +1042,14 @@ fn register_link_handler() {
     // files below, and offers a software store when neither names a handler.
     let config = std::env::var("XDG_CONFIG_HOME").map(std::path::PathBuf::from).unwrap_or_else(|_| util::home().join(".config"));
     let defaults = std::fs::read_to_string(config.join("mimeapps.list")).unwrap_or_default();
-    for scheme in ["x-scheme-handler/raycast", "x-scheme-handler/com.raycast"] {
+    // `echospot://<pack>.<ability>?…` opens a pack's surface from anywhere (API-DESIGN.md §8.4).
+    for scheme in ["x-scheme-handler/raycast", "x-scheme-handler/com.raycast", "x-scheme-handler/echospot"] {
         if !names_handler(&defaults, scheme) {
             let _ = util::output("xdg-mime", &["default", LINK_HANDLER, scheme]);
         }
     }
     let cache = std::fs::read_to_string(apps.join("mimeinfo.cache")).unwrap_or_default();
-    if !names_handler(&cache, "x-scheme-handler/raycast") {
+    if !names_handler(&cache, "x-scheme-handler/raycast") || !names_handler(&cache, "x-scheme-handler/echospot") {
         let _ = util::output("update-desktop-database", &[&apps.display().to_string()]);
     }
 }

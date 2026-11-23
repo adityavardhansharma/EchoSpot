@@ -152,6 +152,8 @@ fn main() {
     };
     let mut app = rune::App::new(spec).window_options(options).on_focus(on_focus).compositor(glass::Glass::default());
     if !headless {
+        // `echospot://` and `raycast://` links reach the resident palette from a browser or a notification.
+        std::thread::spawn(ext::register_link_handler);
         app = app.keep_running();
         if !show_now {
             app = app.windowless();

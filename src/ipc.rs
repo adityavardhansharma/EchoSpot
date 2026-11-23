@@ -120,7 +120,15 @@ pub fn serve(handle: AppHandle<App>) {
                     let url = words.next().unwrap_or("").to_string();
                     let (tx, rx) = std::sync::mpsc::channel();
                     handle.update(move |s, t| {
-                        let _ = tx.send(crate::ext::open_link(s, &url, t));
+                        // `echospot://github.prs?repo=rune` opens a pack's surface from anywhere.
+                        let opened = if url.starts_with("echospot://") {
+                            s.reset();
+                            s.will_show();
+                            crate::packs::host::open_link(s, &url, t)
+                        } else {
+                            crate::ext::open_link(s, &url, t)
+                        };
+                        let _ = tx.send(opened);
                     });
                     if rx.recv_timeout(std::time::Duration::from_secs(2)) == Ok(true) {
                         handle.open();

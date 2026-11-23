@@ -71,3 +71,4 @@ pub mod check;
 pub mod devtest;
 pub mod template;
 pub mod inbox;
+pub mod links;
