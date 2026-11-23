@@ -85,6 +85,8 @@ struct Monitor {
     #[serde(default)]
     id: i64,
     #[serde(default)]
+    name: String,
+    #[serde(default)]
     width: i64,
     #[serde(default)]
     height: i64,
@@ -100,8 +102,26 @@ struct Monitor {
     special_workspace: WorkspaceRef,
 }
 
+/// Where one of this process's windows is: the output it is on, by name, the output's place and
+/// scale, and the window's own place, all in layout points.
+pub struct OnOutput {
+    pub output: String,
+    pub monitor: (f32, f32),
+    pub scale: f32,
+    pub at: (f32, f32),
+}
+
+/// This process's mapped window of `size` points, where it is now.
+pub fn own_window(size: (f32, f32)) -> Option<OnOutput> {
+    let pid = std::process::id() as i64;
+    let clients: Vec<Client> = hypr("clients")?;
+    let own = clients.into_iter().find(|c| c.mapped && c.pid == pid && (c.size[0] as f32 - size.0).abs() <= 2.0 && (c.size[1] as f32 - size.1).abs() <= 2.0)?;
+    let m = hypr::<Vec<Monitor>>("monitors")?.into_iter().find(|m| m.id == own.monitor)?;
+    Some(OnOutput { output: m.name, monitor: (m.x as f32, m.y as f32), scale: if m.scale > 0.0 { m.scale as f32 } else { 1.0 }, at: (own.at[0] as f32, own.at[1] as f32) })
+}
+
 /// One request on Hyprland's command socket, its reply as text: no `hyprctl` process per frame.
-fn request(command: &str) -> Option<String> {
+pub(crate) fn request(command: &str) -> Option<String> {
     let sig = std::env::var("HYPRLAND_INSTANCE_SIGNATURE").ok()?;
     let mut s = UnixStream::connect(crate::util::runtime_dir().join("hypr").join(sig).join(".socket.sock")).ok()?;
     s.set_read_timeout(Some(Duration::from_secs(2))).ok();
@@ -136,6 +156,11 @@ pub fn own_shadows_off() {
             done.retain(|address| clients.iter().any(|c| &c.address == address));
             for c in clients.iter().filter(|c| c.pid == pid) {
                 if !done.contains(&c.address) && request(&format!("/dispatch hl.dsp.window.set_prop({{ window = \"address:{}\", prop = \"no_shadow\", value = \"1\" }})", c.address)).is_some() {
+                    // See-through capture solves for what is behind from exactly what the window
+                    // drew: the compositor must show it as drawn, unblurred, undimmed, fully opaque.
+                    for (prop, value) in [("no_blur", "1"), ("no_dim", "1"), ("opacity_override", "1"), ("opacity", "1.0")] {
+                        let _ = request(&format!("/dispatch hl.dsp.window.set_prop({{ window = \"address:{}\", prop = \"{prop}\", value = \"{value}\" }})", c.address));
+                    }
                     done.push(c.address.clone());
                 }
             }
