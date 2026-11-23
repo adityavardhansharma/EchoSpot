@@ -830,6 +830,14 @@ impl App {
     /// Closes the dialog with its answer: runs its action, or replies to the extension that asked.
     pub fn answer_dialog(&mut self, confirmed: bool, tx: &mut Tx) {
         let Some(dialog) = self.dialog.take() else { return };
+        if let Some(token) = self.packs.confirm.take() {
+            // A final ability asked first: this is the person's answer.
+            self.packs.rt.answer_confirm(token, confirmed, false);
+            if !confirmed {
+                self.toast = None;
+            }
+            return;
+        }
         if self.dialog_reply.is_some() {
             crate::ext::reply_confirm(self, confirmed);
         } else if confirmed {
