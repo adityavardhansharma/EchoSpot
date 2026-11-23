@@ -804,6 +804,16 @@ For heavy compute or crates: Rust compiled to WASM components, run with wasmtime
 - Compiled once to native code by wasmtime and cached, so later loads are fast.
 - Build progress drives the `checking` loader.
 
+As built (`src/packs/wasm/`):
+
+- **A Rust pack is a pack folder with a `Cargo.toml`** (`[lib] crate-type = ["cdylib"]`). EchoSpot runs `cargo build --release --target wasm32-wasip2` itself: inline in `echospot dev`, on a thread in the app, where the row shows the build's progress and the last good version keeps answering. Compiled components are cached under the host's state folder, keyed by their bytes and the wasmtime version.
+- **The WIT world** (`echospot.wit`) is small and fixed: the pack exports `describe()` and `run(context, entry, name, input, output)`, and imports `host.call`, `host.put` and `host.log`. Values cross as JSON in the same shapes Luau packs use, so `describe()` returns exactly what Luau's `__describe` does and one `Index` serves both tiers.
+- **Types reach Rust from the same declarations**: before each build EchoSpot writes `src/calls.rs`, with a typed function for every address the pack may call (built-ins field by field, other packs' abilities as JSON), and `src/echo.rs`, the pack's side of the API (`Pack`, `Ability`, `Verb`, `Store`, `Trigger`, `t::…`, `Cx`). The folder stays self-contained: its only dependencies are `wit-bindgen` and `serde_json`.
+- **One broker**: each call runs in a fresh instance on a worker. `host.call` goes through `Runtime::start` under the call's own frame, so the pack's grants, read-stays-read, dry runs, audit and undo apply unchanged. WASI is bare: no preopened folders, sockets, environment or arguments.
+- **Limits**: a 64 MB heap and a fuel budget of about ten seconds of compute per call. Running out stops the call (E0209); a panic stops it (E0208) and its message goes to `echospot dev logs`, as does anything printed.
+- **Both tiers in one pack**: an `init.luau` beside `Cargo.toml` draws surfaces from the Rust abilities' output. A name is declared in one tier, never both.
+- `echospot dev new <id> --from rust` scaffolds one; `echospot dev docs rust` documents it. Built with the `wasm` cargo feature (on by default).
+
 ---
 
 ## 21. Raycast compatibility
@@ -946,13 +956,13 @@ built-ins, Rust tier.
 
 ---
 
-## 25. Open questions
+## 25. Open questions, as settled
 
-1. Hotkey for point and say: `Ctrl+.` or something else?
-2. Default Look for new packs: the user's current Look, or always `glass`?
-3. Should `ai.agent` (§12) be in M3 or wait until budgets have been used for a while?
-4. Where boards live by default: palette route or their own window?
-5. Do system packs ship as Luau source inside the binary (forkable) or compiled bytecode plus source on demand?
+1. Point and say is `Ctrl+.` on any pack screen.
+2. A pack with no Look uses the user's (`pack_look` in Settings, `glass` until changed).
+3. `ai.agent` shipped with the other AI primitives, under the same per-pack budget.
+4. A board opens in the palette; its row also offers Open in Window and Show on Desktop.
+5. System packs ship as Luau source inside the binary, so `echospot fork <id>` copies them as they are.
 
 ---
 
