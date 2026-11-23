@@ -1375,6 +1375,64 @@ fn shortcuts(p: &Palette) -> Vec<El> {
     }).collect()
 }
 
+/// Packs: what each holds, spends, runs and costs, the secrets the host keeps for them, and the
+/// audit log of every call that wasn't a free read.
+fn packs_pane(ui: &SettingsUi, p: &Palette) -> Vec<El> {
+    let snap = &ui.packs;
+    let mut out = Vec::new();
+    if snap.packs.is_empty() {
+        out.push(noted(p, "Packs", card(p, vec![setting(p, "No packs yet", "Ask your coding agent: \u{201c}make me a command that…\u{201d}", el())]),
+            "Packs live in ~/.config/echospot/packs. A pack asks for its permissions in EchoSpot, and you grant them there."));
+        return out;
+    }
+    for pack in snap.packs.iter().filter(|p| !p.system) {
+        let mut rows = vec![setting(p, &pack.status, &pack.cost, el())];
+        if let Some(budget) = pack.budget {
+            rows.push(setting(p, "AI this month", &format!("${:.2} of ${budget:.2}", pack.spent), el()));
+        }
+        for (name, when, last) in &pack.runs {
+            rows.push(setting(p, &format!("Runs unasked: {name}"), &format!("{when} · last: {last}"), el()));
+        }
+        for ask in &pack.held {
+            let (id, revoked) = (pack.id.clone(), ask.clone());
+            rows.push(setting(p, &ask.sentence(), "Granted", button(p, &format!("revoke-{}-{}-{}", pack.id, ask.kind, ask.what), "Revoke", true, move |ui, _| ui.revoke(id.clone(), Some(revoked.clone())))));
+        }
+        if pack.held.len() > 1 {
+            let id = pack.id.clone();
+            rows.push(setting(p, "Every permission", "It stops until you review them again in EchoSpot.", button(p, &format!("revoke-all-{}", pack.id), "Revoke All", true, move |ui, _| ui.revoke(id.clone(), None))));
+        }
+        let note = if pack.facts.is_empty() { "Nothing seen yet.".to_string() } else { pack.facts.join(" · ") };
+        out.push(noted(p, &pack.name, card(p, rows), note));
+    }
+    let system: Vec<El> = snap.packs.iter().filter(|p| p.system).map(|pack| setting(p, &pack.name, &format!("Part of EchoSpot · {}", pack.cost), el())).collect();
+    if !system.is_empty() {
+        out.push(noted(p, "Part of EchoSpot", card(p, system), "Written on the same API. `echospot fork <id>` copies one into your packs to change."));
+    }
+    let secrets: Vec<El> = if snap.secrets.is_empty() {
+        vec![setting(p, "No secrets", "A pack names a secret, as auth = \"github\"; EchoSpot asks you for its value and adds it for the hosts it is bound to.", el())]
+    } else {
+        snap.secrets.iter().map(|(name, hosts)| {
+            let gone = name.clone();
+            setting(p, name, &format!("Sent only to {}", hosts.join(", ")), button(p, &format!("secret-{name}"), "Remove", true, move |ui, _| {
+                crate::packs::secrets::remove(&gone);
+                ui.load_packs();
+            }))
+        }).collect()
+    };
+    out.push(noted(p, "Secrets", card(p, secrets), "Kept by EchoSpot, never shown to a pack, and never sent anywhere but their hosts."));
+    let audit: Vec<El> = if snap.audit.is_empty() {
+        vec![setting(p, "Nothing yet", "Every call a pack makes that isn't a free read is written here.", el())]
+    } else {
+        snap.audit.iter().take(40).map(|e| {
+            let when = crate::util::ago(crate::util::now_secs().saturating_sub(e.t as u64));
+            let what = format!("{} · {}{}{}", e.pack, when, if e.ok { String::new() } else { format!(" · failed: {}", e.error) }, if e.usd > 0.0 { format!(" · ${:.3}", e.usd) } else { String::new() });
+            setting(p, &format!("{}  {}", e.address, crate::util::truncate(&e.args, 60)), &what, text(e.kind.clone()).font(NOTE).color(p.text_tertiary))
+        }).collect()
+    };
+    out.push(noted(p, "Audit Log", card(p, audit), "The newest 40. `echospot dev logs` shows all of it, and follows it with --follow."));
+    out
+}
+
 fn about(p: &Palette) -> Vec<El> {
     let source = |title: &str, subtitle: &str, label: &'static str, url: &'static str| setting(p, title, subtitle, link_button(p, label, label, url));
     vec![
