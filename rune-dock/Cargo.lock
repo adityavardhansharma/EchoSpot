@@ -446,13 +446,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "background"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -895,20 +888,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cursed-settings"
-version = "0.0.1"
-dependencies = [
- "bytemuck",
- "rune",
- "rune-fx",
- "rune-kit",
- "rune-light",
- "rune-motion",
- "rune-theme-opencode",
- "wgpu",
-]
-
-[[package]]
 name = "cursor-icon"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1094,20 +1073,6 @@ name = "dpi"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
-
-[[package]]
-name = "drag-out"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
-name = "drop-files"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
 
 [[package]]
 name = "either"
@@ -1373,13 +1338,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aa9a19cbb55df58761df49b23516a86d432839add4af60fc256da840f66ed35b"
 
 [[package]]
-name = "frosted-bar"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
 name = "futures-channel"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1516,20 +1474,6 @@ dependencies = [
  "khronos_api",
  "log",
  "xml-rs",
-]
-
-[[package]]
-name = "glass-card"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
-name = "glass-panel"
-version = "0.0.1"
-dependencies = [
- "rune",
 ]
 
 [[package]]
@@ -1670,13 +1614,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "hello"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
 
 [[package]]
 name = "hermit-abi"
@@ -2091,24 +2028,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
-name = "kit-gallery"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-kit",
- "rune-theme-opencode",
- "wgpu",
-]
-
-[[package]]
-name = "knobs"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-knobs",
-]
-
-[[package]]
 name = "konst"
 version = "0.2.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2152,25 +2071,6 @@ dependencies = [
  "arrayvec",
  "euclid",
  "smallvec",
-]
-
-[[package]]
-name = "lab"
-version = "0.0.1"
-dependencies = [
- "bytemuck",
- "rune",
- "rune-fx",
- "rune-light",
- "rune-motion",
- "wgpu",
-]
-
-[[package]]
-name = "launcher"
-version = "0.0.1"
-dependencies = [
- "rune",
 ]
 
 [[package]]
@@ -2270,13 +2170,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 
 [[package]]
-name = "live-values"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2310,29 +2203,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3bd0dd2cd90571056fdb71f6275fada10131182f84899f4b2a916e565d81d86"
 
 [[package]]
-name = "luau-panel"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-luau",
- "serde",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "luau0-src"
 version = "0.23.0+luau745"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44a77f4ce1adc38145ccd67a0e4b1928e642aedf906d1131d7f703e573c31162"
 dependencies = [
  "cc",
-]
-
-[[package]]
-name = "matched"
-version = "0.0.1"
-dependencies = [
- "rune",
 ]
 
 [[package]]
@@ -2427,24 +2303,6 @@ dependencies = [
  "libc",
  "luau0-src",
  "pkg-config",
-]
-
-[[package]]
-name = "motion-bento"
-version = "0.0.1"
-dependencies = [
- "motion-bento-chaos",
- "rune",
- "rune-kit",
-]
-
-[[package]]
-name = "motion-bento-chaos"
-version = "0.0.1"
-dependencies = [
- "libc",
- "procwatch",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3001,14 +2859,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "odometer"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-kit",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3066,20 +2916,6 @@ checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "overlay"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
-name = "overlay-lab"
-version = "0.0.1"
-dependencies = [
- "rune",
 ]
 
 [[package]]
@@ -3300,13 +3136,6 @@ name = "plain"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
-
-[[package]]
-name = "playground"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
 
 [[package]]
 name = "png"
@@ -3748,13 +3577,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rich-clipboard"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
 name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3871,6 +3693,15 @@ dependencies = [
  "rune-ref",
  "rune-staging",
  "wgpu",
+]
+
+[[package]]
+name = "rune-glass"
+version = "0.1.0"
+dependencies = [
+ "rustix 1.1.5",
+ "wayland-client",
+ "wayland-protocols",
 ]
 
 [[package]]
@@ -4038,16 +3869,6 @@ dependencies = [
  "rune",
  "rune-kit",
  "serde_json",
-]
-
-[[package]]
-name = "rune-www"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-kit",
- "rune-motion",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -4230,14 +4051,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "settings"
-version = "0.0.1"
-dependencies = [
- "procwatch",
- "rune",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4249,27 +4062,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "shapes"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-
-[[package]]
-name = "showreel"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-fx",
- "rune-motion",
- "wgpu",
-]
 
 [[package]]
 name = "signal-hook-registry"
@@ -4317,23 +4113,6 @@ name = "siphasher"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
-
-[[package]]
-name = "site-scenes"
-version = "0.0.1"
-dependencies = [
- "rune",
- "rune-fx",
- "rune-light",
- "wgpu",
-]
-
-[[package]]
-name = "sketch"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
 
 [[package]]
 name = "skrifa"
@@ -4780,13 +4559,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7c4ceeeca15c8384bbc3e011dbd8fccb7f068a440b752b7d9b32ceb0ca0e2e8"
 
 [[package]]
-name = "todo"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
 name = "tokio"
 version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5025,22 +4797,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "video-player"
-version = "0.0.1"
-dependencies = [
- "rune",
-]
-
-[[package]]
-name = "video-tiles"
-version = "0.0.1"
-dependencies = [
- "rune",
- "serde_json",
- "wgpu",
-]
-
-[[package]]
 name = "wait-timeout"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5269,22 +5025,6 @@ dependencies = [
  "log",
  "once_cell",
  "pkg-config",
-]
-
-[[package]]
-name = "web-hello"
-version = "0.0.1"
-dependencies = [
- "rune",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "web-showcase"
-version = "0.0.1"
-dependencies = [
- "rune",
- "wasm-bindgen",
 ]
 
 [[package]]

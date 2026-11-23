@@ -19,6 +19,7 @@ members = [
     "crates/rune-perf",
     "crates/rune-luau",
     "crates/rune-taffy",
+    "crates/rune-glass",
     "themes/opencode",
 ]
 exclude = ["tools/rune-dev-guard", "vendor/accesskit_windows", "vendor/parley_engine", "vendor/tiny-skia-path", "vendor/wgpu-hal", "vendor/winit"]

@@ -1,0 +1,11 @@
+[package]
+name = "rune-glass"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "See-through capture: the live screen behind a translucent window, recovered from a standard capture of the output, for Liquid Glass that bends what is really there."
+
+[dependencies]
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "staging"] }
+rustix = { version = "1", features = ["fs", "mm", "time"] }
