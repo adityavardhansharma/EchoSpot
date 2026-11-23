@@ -55,3 +55,4 @@ pub mod secrets;
 pub mod blocks;
 pub mod faces;
 pub mod system;
+pub mod graph;

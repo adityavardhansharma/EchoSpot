@@ -397,6 +397,63 @@ impl Runtime {
         for id in gone {
             self.unload(&id);
         }
+        // What ships inside EchoSpot, unless a fork in the user's packs took its id.
+        for dir in super::system::unpack() {
+            let taken = dir.file_name().and_then(|n| n.to_str()).is_some_and(|id| seen.iter().any(|s| s == id));
+            if !taken {
+                self.load(&dir, false);
+            }
+        }
+        self.check_dependencies();
+    }
+
+    /// Marks a pack broken when an address it names no longer exists, and warns the packs that
+    /// depend on an ability whose signature changed.
+    pub fn check_dependencies(&mut self) {
+        let known: std::collections::HashSet<String> = self.addresses().into_iter().map(|a| a.0).collect();
+        let mut signatures = HashMap::new();
+        for (address, signature, _, _) in self.addresses() {
+            signatures.insert(address, signature);
+        }
+        let changed: Vec<String> = signatures.iter().filter(|(a, s)| self.signatures.get(*a).is_some_and(|old| old != *s)).map(|(a, _)| a.clone()).collect();
+        let inputs: HashMap<String, Type> = self.packs.values().flat_map(|p| p.index.abilities.iter().map(move |(n, a)| (format!("{}.{n}", p.id), a.input.clone()))).collect();
+        let mut broken: Vec<(String, PackError)> = Vec::new();
+        for pack in self.packs.values().filter(|p| matches!(p.state, State::Ready | State::NeedsGrant)) {
+            for used in super::graph::uses(pack) {
+                let exists = known.contains(&used.address) || self.shared.stores.borrow().exists(&used.address.replacen(".stores.", ".", 1)) || used.address.starts_with("raycast.");
+                if !exists && used.literal {
+                    let e = PackError::new("E0300", format!("{} calls {}, which no longer exists", pack.id, used.address))
+                        .at(used.at.clone()).nearest(&used.address, known.iter().map(String::as_str)).learn(format!("echospot dev api search {}", used.address.replace('.', " ")));
+                    broken.push((pack.id.clone(), e));
+                    break;
+                }
+                if changed.contains(&used.address) {
+                    // A change a caller written for the old input can't meet breaks it; anything else is a warning.
+                    let breaks = match (self.inputs.get(&used.address), inputs.get(&used.address)) {
+                        (Some(old), Some(new)) => breaking(old, new),
+                        _ => None,
+                    };
+                    match breaks {
+                        Some(why) if used.literal => {
+                            let e = PackError::new("E0303", format!("{} changed in a way {} can't meet: {why}; it is now {}", used.address, pack.id, signatures[&used.address]))
+                                .at(used.at.clone()).learn(format!("echospot dev api show {}", used.address));
+                            broken.push((pack.id.clone(), e));
+                            break;
+                        }
+                        _ => self.shared.log(&pack.id, "warn", format!("{} changed its signature to {}; {} uses it at {}", used.address, signatures[&used.address], pack.id, used.at)),
+                    }
+                }
+            }
+        }
+        for (id, error) in broken {
+            self.shared.log(&id, "error", error.to_string());
+            if let Some(pack) = self.packs.get_mut(&id) {
+                pack.state = State::Broken;
+                pack.error = Some(error);
+            }
+        }
+        self.signatures = signatures;
+        self.inputs = inputs;
     }
 
     pub fn unload(&mut self, id: &str) {
@@ -559,7 +616,7 @@ impl Runtime {
                 pack.stale = true;
             }
             _ => {
-                self.packs.insert(id.to_string(), Pack { id: id.into(), dir: dir.into(), manifest, state: State::Broken, error: Some(error), index: Index::default(), script: None, system, stamp: 0, load_ms: 0.0, stale: false });
+                self.packs.insert(id.to_string(), Pack { id: id.into(), dir: dir.into(), manifest, state: State::Broken, error: Some(error), index: Index::default(), script: None, system, stamp: 0, load_ms: 0.0, stale: false, wasm: None, wasm_index: Index::default(), building: None });
             }
         }
         self.events.push(Event::PacksChanged);
@@ -605,6 +662,10 @@ impl Runtime {
         }
         if pack.state == State::Drafting {
             return Err(PackError::new("E0203", format!("{id} is still being built: it has no init.luau yet")));
+        }
+        if !pack.dir.join("init.luau").is_file() {
+            let why = if pack.building.is_some() { "is still being built" } else { "is a Rust pack with no init.luau, so it has no Luau to run" };
+            return Err(PackError::new("E0203", format!("{id} {why}")).learn("echospot dev docs rust"));
         }
         if pack.index.abilities.is_empty() && pack.index.surfaces.is_empty() && pack.error.is_some() {
             return Err(pack.error.clone().expect("checked"));
