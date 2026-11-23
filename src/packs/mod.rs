@@ -65,3 +65,4 @@ pub mod scenes;
 pub mod surface;
 pub mod design;
 pub mod icon;
+pub mod defs;
