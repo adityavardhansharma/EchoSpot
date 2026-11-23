@@ -903,6 +903,9 @@ impl App {
             && features::snap::key(self, only, ev, tx) {
             return true;
         }
+        if crate::packs::host::key(self, ev, tx) {
+            return true;
+        }
         let layout = self.top().layout;
         let empty_query = self.top().query.text.is_empty();
         let m = ev.mods;
