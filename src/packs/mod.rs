@@ -64,3 +64,4 @@ pub mod fx;
 pub mod scenes;
 pub mod surface;
 pub mod design;
+pub mod icon;

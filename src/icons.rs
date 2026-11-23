@@ -17,6 +17,10 @@ macro_rules! icons {
             $(if name.eq_ignore_ascii_case(stringify!($name)) { return Some(&$name); })*
             None
         }
+        /// Every glyph with its name: what a new icon is weighed and compared against.
+        pub fn all() -> Vec<(&'static str, &'static Icon)> {
+            vec![$((stringify!($name), &$name)),*]
+        }
     };
 }
 
