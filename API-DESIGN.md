@@ -207,7 +207,7 @@ return echo.pack {
 | Kind | Meaning | Rule |
 |---|---|---|
 | `read` | No effect on the world. | May only call `read` abilities. Enforced at runtime; violations are errors. |
-| `effect` | Changes something and can be undone. | Must provide `undo` or call only effects that have one. |
+| `effect` | Changes something and can be undone. | Must provide `undo` or call only effects that have one. Built-ins that leave nothing lasting (a notification, a page opened, a window focused or moved) count as having one; `run.exec`, `http.request` and other packs' effects with no undo don't (E0311). |
 | `final` | Cannot be undone (sends a message, deletes permanently). | Host shows a confirm step unless the user turned it off for that ability. |
 
 The host checks kinds as calls happen. A `read` ability that calls an effect fails with an error

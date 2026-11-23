@@ -719,8 +719,20 @@ impl Runtime {
             return Err(PackError::new("E0310", format!("{by} is a read, so it can't call {address}, which is {} {}", if kind == Kind::Effect { "an" } else { "a" }, kind.name()))
                 .learn("echospot dev docs kinds"));
         }
-        if kind == Kind::Final && let Some(effect) = parent_no_undo {
+        if kind == Kind::Final && let Some(effect) = &parent_no_undo {
             return Err(PackError::new("E0311", format!("{effect} is an effect with no undo, so it can't call {address}, which is final; give {effect} an undo or declare it kind = \"final\"")).learn("echospot dev docs kinds"));
+        }
+        // An effect with no undo of its own may call only effects that have one, or that leave
+        // nothing lasting (§6.2): otherwise what it did couldn't be taken back.
+        if kind == Kind::Effect && let Some(effect) = &parent_no_undo {
+            let covered = match (&ability, &spec) {
+                (Some((_, a)), _) => a.has_undo,
+                (_, Some(s)) => builtins::effect_is_covered(&s.address),
+                _ => true,
+            };
+            if !covered {
+                return Err(PackError::new("E0311", format!("{effect} is an effect with no undo, so it can call only effects that can be undone; {address} can't be. Give {effect} an undo, or declare it kind = \"final\"")).learn("echospot dev docs kinds"));
+            }
         }
         // AI and MCP get every read, and only the effects a pack marked for them.
         if matches!(origin, Origin::Ai | Origin::Mcp) {
