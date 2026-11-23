@@ -322,7 +322,12 @@ impl App {
                 self.ext.stop(id);
             }
             let was_form = self.screens.pop().is_some_and(|s| s.route == Route::Form);
-            let ext_form = matches!(self.form.take().map(|f| f.target), Some(features::forms::Target::ExtForm { .. }));
+            self.packs.drawn.borrow_mut().remove(&self.screens.len());
+            let left = self.form.take().map(|f| f.target);
+            if let Some(features::forms::Target::Pack(form)) = &left {
+                crate::packs::host::cancel_form(self, form);
+            }
+            let ext_form = matches!(left, Some(features::forms::Target::ExtForm { .. }));
             // An extension whose whole view is a form leaves with it.
             if was_form && ext_form && self.screens.len() > 1 {
                 return self.pop(tx);
@@ -343,6 +348,11 @@ impl App {
             }
         }
         self.screens.truncate(1);
+        self.packs.drawn.borrow_mut().clear();
+        self.packs.sending = None;
+        if let Some(token) = self.packs.confirm.take() {
+            self.packs.rt.answer_confirm(token, false, false);
+        }
         self.menu = None;
         self.dialog = None;
         self.form = None;
