@@ -8,6 +8,7 @@ mod backdrop;
 mod ext;
 mod features;
 mod glass;
+mod seethrough;
 mod hud;
 mod icons;
 mod ipc;
@@ -223,6 +224,15 @@ fn main() {
         });
         let settings = settings_handle.clone();
         live::spawn_settings(settings_ui::SIZE, move |w, h, rgba| {
+            settings.update(move |ui: &mut settings_ui::SettingsUi, _| ui.set_backdrop(w, h, rgba));
+        });
+        // Liquid Glass over the live screen: see-through capture, standard protocols only.
+        let palette = handle.clone();
+        seethrough::spawn("palette", (theme::size::WINDOW_W, theme::size::WINDOW_H), move |w, h, rgba| {
+            palette.update_if(move |s: &mut App, _| s.visible && s.set_backdrop(w, h, rgba));
+        });
+        let settings = settings_handle.clone();
+        seethrough::spawn("settings", settings_ui::SIZE, move |w, h, rgba| {
             settings.update(move |ui: &mut settings_ui::SettingsUi, _| ui.set_backdrop(w, h, rgba));
         });
     }
