@@ -284,6 +284,9 @@ pub fn build(app: &App, query: &str) -> Built {
         sections.push("Calculator", vec![item]);
     }
 
+    // What packs make of the line: a query's answer, or an example's shape with its slots filled.
+    sections.push("Answers", app.packs.answers.clone());
+
     // An alias and a space hand the rest of the line to that quicklink: `g rust traits`.
     if let Some((alias, rest)) = q.split_once(' ').map(|(a, r)| (a, r.trim())).filter(|(_, r)| !r.is_empty()) {
         let hits: Vec<Item> = app.quicklinks.list.iter()
