@@ -913,6 +913,16 @@ fn hotkey_cell(ui: &SettingsUi, p: &Palette, c: &Command, selected: bool) -> El 
             .child(inside);
     }
     let Some(chord) = ui.bindings.hotkeys.get(&c.id) else {
+        // A pack's suggestion, taken with a click here and nowhere else; taken already, it isn't offered.
+        let free = !c.suggested.is_empty() && !ui.bindings.hotkeys.values().any(|k| *k == c.suggested);
+        if free {
+            let (take, chord) = (id.clone(), c.suggested.clone());
+            return row().key(format!("hotkey-{id}")).w(HOTKEY_W).h(CONTROL_H).pl(space::XS).gap(space::XS).center_y().radius(radius::BAR_CONTROL)
+                .fill(Color::TRANSPARENT).hover(p.control_surface).press(p.control_hover).motion(motion::HOVER)
+                .on_press_tx(move |ui: &mut SettingsUi, _| ui.set_hotkey(&take, &chord))
+                .child(text("Use").font(CONTROL).color(p.text_tertiary))
+                .child(el().opacity(0.6).child(ui::keycaps_row(p, &c.suggested, true)));
+        }
         return empty_cell(p, format!("hotkey-{id}"), HOTKEY_W, "Record Hotkey", selected)
             .on_press_tx(move |ui: &mut SettingsUi, tx| ui.begin_record(&id, tx));
     };

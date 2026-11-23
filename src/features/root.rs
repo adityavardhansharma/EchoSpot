@@ -214,11 +214,17 @@ pub struct Command {
     /// "Application", "Command", "Quicklink", or the extension it belongs to.
     pub kind: String,
     pub icon: IconSrc,
+    /// A hotkey the row's pack suggests, for Settings to offer.
+    pub suggested: String,
 }
 
 /// Every launcher row that can carry an alias and a hotkey.
 pub fn catalog(app: &App) -> Vec<Command> {
-    entries(app).into_iter().map(|e| Command { id: e.item.id, title: e.item.title, kind: e.item.trailing, icon: e.item.icon }).collect()
+    entries(app).into_iter().map(|e| {
+        let suggested = e.item.id.strip_prefix("pack:").and_then(|address| address.split_once('.'))
+            .and_then(|(pack, name)| app.packs.rt.packs.get(pack).and_then(|p| p.ability(name)).map(|a| a.hotkey.clone())).unwrap_or_default();
+        Command { id: e.item.id, title: e.item.title, kind: e.item.trailing, icon: e.item.icon, suggested }
+    }).collect()
 }
 
 /// What Return does on the launcher row with this id.
