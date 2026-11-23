@@ -62,3 +62,4 @@ pub mod examples;
 pub mod trust;
 pub mod fx;
 pub mod scenes;
+pub mod surface;
