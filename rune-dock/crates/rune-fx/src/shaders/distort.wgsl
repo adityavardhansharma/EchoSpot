@@ -154,7 +154,17 @@ fn shade(in: VOut) -> vec4f {
                 col = mix(col, acc, clamp(max(soften, frost), 0.0, 1.0));
             }
         }
-        col = mix(col, col * i.c0.rgb, i.p2.y * presence);
+        let adapt = i.aux.x;
+        if (adapt > 0.0) {
+            // Regular glass: a scrim of the tint, thickest where the backdrop is nearest the
+            // brightness of what the glass carries (light text on a dark tint, dark on a light
+            // one), so contrast holds over anything without fogging what is already calm.
+            let bl = lum(col);
+            let need = select(smoothstep(0.42, 0.015, bl), smoothstep(0.01, 0.32, bl), lum(i.c0.rgb) < 0.5);
+            col = mix(col, i.c0.rgb, clamp(i.p2.y + adapt * need, 0.0, 0.94) * presence);
+        } else {
+            col = mix(col, col * i.c0.rgb, i.p2.y * presence);
+        }
         // Light, after Apple's Liquid Glass (rune-dock): a thick slab. The refracted page darkens a
         // little toward the rim (the light travels through more glass there), a crisp specular
         // edge catches the light on the lit diagonal and, fainter, on the opposite one, a soft
