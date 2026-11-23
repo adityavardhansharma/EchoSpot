@@ -851,22 +851,22 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         choice(p, "theme-system".into(), s.appearance == "system", "Auto", mini_system(), |s| s.appearance = "system".into()),
         choice(p, "theme-light".into(), s.appearance == "light", "Light", mini_palette(false), |s| s.appearance = "light".into()),
         choice(p, "theme-dark".into(), s.appearance == "dark", "Dark", mini_palette(true), |s| s.appearance = "dark".into()),
-        choice(p, "theme-liquid".into(), s.liquid(), "Liquid", mini_liquid(), |s| s.appearance = "liquid".into()),
     ];
     let surfaces = vec![
         choice(p, "surface-capture".into(), s.backdrop == "capture", "Blur", mini_surface("capture"), |s| s.backdrop = "capture".into()),
         choice(p, "surface-compositor".into(), s.backdrop == "compositor", "Compositor", mini_surface("compositor"), |s| s.backdrop = "compositor".into()),
+        choice(p, "surface-liquid".into(), s.liquid(), "Liquid", mini_liquid(), |s| s.backdrop = "liquid".into()),
         choice(p, "surface-none".into(), s.backdrop == "none", "Solid", mini_surface("none"), |s| s.backdrop = "none".into()),
     ];
     let surface_note = match s.backdrop.as_str() {
-        _ if s.liquid() => "Liquid is its own surface: glass that bends the screen behind it.",
+        "liquid" => "Glass that bends the screen behind it.",
         "capture" => "EchoSpot blurs the screen behind it itself. Works with Hyprland's blur off.",
         "compositor" => "Left translucent for Hyprland's own blur to fill.",
         _ => "An opaque panel: nothing shows through.",
     };
     vec![
         group(p, "Appearance", card(p, vec![
-            pictured(p, "Theme", "Auto follows the system. Liquid is glass.", themes),
+            pictured(p, "Theme", "Auto follows the system.", themes),
             pictured(p, "Surface", surface_note, surfaces),
         ])),
         group(p, "Behavior", card(p, vec![

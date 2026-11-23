@@ -657,11 +657,11 @@ fn pack_body(s: &App, p: &Palette, scale: f32) -> Option<El> {
 /// The surface every EchoSpot window stands on: a rounded panel inset in its window by
 /// `WINDOW_MARGIN` (room for the shadow), filled with the screen behind it, blurred, under the
 /// scrim. `backdrop` is that capture when there is one; `mode` is the Surface setting. `liquid`
-/// is the Liquid theme with its glass ready: the panel is left clear for the lens beneath.
+/// is the Liquid surface with its glass ready: the panel is left clear for the lens beneath.
 pub fn panel_surface(key: &str, p: &Palette, (w, h): (f32, f32), backdrop: Option<&rune::Pixels>, mode: &str, liquid: bool) -> El {
     let panel = el().key(key.to_string()).absolute(size::WINDOW_MARGIN, size::WINDOW_MARGIN).size(w, h)
         .radius(radius::PANEL).clip_rounded(radius::PANEL);
-    // Liquid: the compositor has drawn the glass, with its own rim and shadow, under the window.
+    // Liquid: the lens is drawn under the UI, with its own rim and shadow; the panel stays clear.
     if liquid {
         return panel;
     }

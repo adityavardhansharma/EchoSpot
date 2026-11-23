@@ -21,7 +21,7 @@ pub struct FileSearch {
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(default)]
 pub struct Settings {
-    /// "system", "dark", "light" or "liquid": Liquid Glass, written in the system's ink.
+    /// "system", "dark" or "light": the ink. Liquid Glass is a Surface, in either ink.
     pub appearance: String,
     /// Hide the palette when it loses focus.
     pub hide_on_blur: bool,
@@ -32,7 +32,8 @@ pub struct Settings {
     pub animations: bool,
     /// What the panel's surface is made of: "capture" blurs a capture of the screen behind it
     /// (works with Hyprland's blur off, Omarchy's default); "compositor" leaves the panel
-    /// translucent for Hyprland's own blur; "none" draws it nearly opaque.
+    /// translucent for Hyprland's own blur; "liquid" is Liquid Glass that bends the screen
+    /// behind it; "none" draws it nearly opaque.
     pub backdrop: String,
     /// The currency a bare amount converts to in the calculator, as a code ("usd"). Empty
     /// follows the system's time zone and locale.
@@ -66,6 +67,11 @@ impl Settings {
         }
         let mut settings: Settings = util::read_json(&path);
         settings.ai.normalize();
+        // Liquid was a theme; it is a Surface now, in the system's ink as it was.
+        if settings.appearance == "liquid" {
+            settings.appearance = "system".into();
+            settings.backdrop = "liquid".into();
+        }
         settings
     }
     pub fn save(&self) {
@@ -77,12 +83,12 @@ impl Settings {
     }
     /// The panel is a pane of Liquid Glass rather than one of the Surface setting's materials.
     pub fn liquid(&self) -> bool {
-        self.appearance == "liquid"
+        self.backdrop == "liquid"
     }
     pub fn dark(&self, system_dark: bool) -> bool {
         match self.appearance.as_str() {
             "light" => false,
-            "system" | "liquid" => system_dark,
+            "system" => system_dark,
             _ => true,
         }
     }
