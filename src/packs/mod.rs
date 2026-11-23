@@ -76,3 +76,4 @@ pub mod mcp;
 pub mod skill;
 pub mod answers;
 pub mod draw;
+pub mod host;

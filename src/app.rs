@@ -137,6 +137,8 @@ pub struct App {
     last_step: f64,
     /// The extension call a confirm dialog answers: session and call id.
     pub dialog_reply: Option<(u64, u64)>,
+    /// Packs: their runtime, and what their screens last drew.
+    pub packs: crate::packs::host::Host,
 }
 
 impl App {
@@ -181,6 +183,7 @@ impl App {
             status: system::Status::default(),
             last_step: f64::NEG_INFINITY,
             dialog_reply: None,
+            packs: crate::packs::host::Host::new(),
         };
         app.refresh();
         app
@@ -235,6 +238,9 @@ impl App {
             Route::Extensions => crate::ext::store::installed(self, &query),
             Route::Ext(id) => crate::ext::view::build(self, id, &query),
         };
+        let look = crate::packs::looks::get(&self.settings.pack_look);
+        *self.packs.fx_rows.borrow_mut() = built.items.iter().enumerate().filter(|(_, i)| !look.intent(&i.intent).effect.is_empty() && look.intent(&i.intent).tint.is_some())
+            .map(|(n, _)| n).take(look.fx_budget).collect();
         let screen = self.top_mut();
         let keep = screen.selected().map(|i| i.id.clone());
         screen.items = built.items;
@@ -376,6 +382,8 @@ impl App {
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
         self.scripts = features::scripts::load();
         features::calendar::refresh(self, false);
+        self.packs.reload(false);
+        self.chat.toolbox = crate::packs::host::toolbox(self);
         self.visible = true;
         self.was_focused = false;
         self.hide_on_blur = true;
@@ -544,6 +552,8 @@ impl App {
                 self.top_mut().filter = index;
                 match self.top().route {
                     Route::Ext(id) => crate::ext::filter_changed(self, id, index),
+                    // A pack's tabs: the next view starts at its top.
+                    Route::Pack { .. } => self.top_mut().sel = 0,
                     Route::Ai => {
                         // Picking another provider's model reorders the list: its own come first.
                         features::ai::set_model(self, index);
@@ -742,6 +752,7 @@ impl App {
                 self.hide(tx);
                 crate::settings_ui::open(&pane);
             }
+            Act::Pack(op) => crate::packs::host::perform(self, op, tx),
             Act::Toast(text) => {
                 if text == "reload" {
                     self.apps = features::apps::scan();
