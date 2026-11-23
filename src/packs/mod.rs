@@ -77,3 +77,4 @@ pub mod skill;
 pub mod answers;
 pub mod draw;
 pub mod host;
+pub mod slots;

@@ -218,12 +218,35 @@ fn main() {
         });
     }
     settings_ui::attach(settings_handle, settings_window, handle.clone());
+    packs::host::attach(handle.clone());
+    // A pack's `window` surface: one more window, hidden until a pack shows it.
+    let pack_spec = AppSpec::<packs::slots::Slot> {
+        setup: Some(packs::slots::setup),
+        on_key: Some(packs::slots::window_key),
+        min_size: Some((0.0, 0.0)),
+        ..AppSpec::new("EchoSpot Pack", packs::slots::WINDOW_SIZE, packs::slots::Slot::default, packs::slots::window_view)
+    };
+    let hidden = WindowOptions { transparent: true, borderless: true, resizable: false, visible: false, min_size: Some((0.0, 0.0)), ..Default::default() };
+    let (pack_handle, pack_window) = app.window(rune::WindowSpec::from_app("pack", rune::App::new(pack_spec)).options(hidden));
+    packs::slots::attach_window(pack_handle, pack_window);
     if !headless {
         let hud = app.overlay(OverlaySpec {
             name: "echospot-hud", size: hud::SIZE, edge: ScreenEdge::Bottom, margin: hud::EDGE_OFFSET,
             align: Align::Center, inset: 0.0, interactive: false, view: hud::view,
         }, hud::Hud::default());
         hud::attach(hud);
+        // Empty slots a pack's overlay or widget is shown in.
+        for n in 0..packs::slots::OVERLAYS + packs::slots::WIDGETS {
+            let widget = n >= packs::slots::OVERLAYS;
+            packs::slots::attach(app.overlay(packs::slots::spec(widget), packs::slots::Slot::default()), widget);
+        }
+        // Once a second: a pack an agent just saved, a schedule come due, an overlay's clock.
+        let pulse = handle.clone();
+        std::thread::Builder::new().name("echospot-packs".into()).spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            pulse.update_if(|s: &mut App, _| packs::host::tick(s));
+        }).ok();
+        packs::host::listen(handle.clone());
         // Twice a minute, extensions' background commands that have come due are run.
         let ticker = handle.clone();
         std::thread::Builder::new().name("echospot-schedule".into()).spawn(move || loop {
