@@ -189,6 +189,33 @@ struct Frame {
 enum WorkerMsg {
     Done(u64, Result<Done>),
     Partial(u64, Value),
+    /// A built-in's worker calls an ability under its own call: `ai.agent` using a tool.
+    Call(u64, String, Value, Sender<Result<Value>>),
+    /// A Rust pack's call writes one of its stores.
+    Put(u64, String, Value, Sender<Result<()>>),
+    /// A Rust pack's call printed or logged something.
+    Log(String, &'static str, String),
+    /// A Rust pack's build moved on.
+    Building(PathBuf, String),
+    /// A Rust pack's build finished.
+    Built(PathBuf, Result<PathBuf>),
+}
+
+/// A final call waiting for a person's yes.
+enum Pending {
+    Ability { owner: String, name: String, input: Value },
+    Spec { spec: Spec, ctx: Box<Ctx>, input: Value },
+    /// `files.pick`: the person is choosing a path for this pack.
+    Pick { pack: String },
+}
+
+/// When something that runs unasked last ran, and how it went.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct Ran {
+    pub t: f64,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub error: String,
 }
 
 /// Something the app should act on.
@@ -202,6 +229,10 @@ pub enum Event {
     Undoable { id: u64, title: String },
     /// A pack's state or declarations changed.
     PacksChanged,
+    /// A final call waits for a yes: answer with [`Runtime::answer_confirm`].
+    Confirm { token: u64, address: String, title: String, summary: String },
+    /// A pack asked the person to pick a path: answer with [`Runtime::answer_pick`].
+    Pick { token: u64, pack: String, title: String, folder: bool },
 }
 
 pub struct Runtime {
