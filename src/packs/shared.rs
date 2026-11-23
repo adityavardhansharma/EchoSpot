@@ -117,6 +117,8 @@ pub struct Shared {
     pub owners: RefCell<HashMap<u64, String>>,
     pub access: RefCell<HashMap<String, Access>>,
     pub logs: RefCell<VecDeque<LogLine>>,
+    /// Where log lines are also written, for `echospot dev logs` in another process to read.
+    pub log_file: RefCell<Option<std::path::PathBuf>>,
     /// Moves whenever something a surface drew from changed: a resource settled, a store was written.
     pub version: Cell<u64>,
     tokens: Cell<u64>,
@@ -127,7 +129,7 @@ impl Default for Shared {
     fn default() -> Self {
         Self {
             requests: Default::default(), resources: Default::default(), stores: Default::default(), scene: Default::default(),
-            dry: Default::default(), owners: Default::default(), access: Default::default(), logs: Default::default(),
+            dry: Default::default(), owners: Default::default(), access: Default::default(), logs: Default::default(), log_file: Default::default(),
             version: Cell::new(1), tokens: Cell::new(0), started: Instant::now(),
         }
     }
@@ -156,7 +158,20 @@ impl Shared {
         if logs.len() >= 2000 {
             logs.pop_front();
         }
-        logs.push_back(LogLine { t: super::audit::now(), pack: pack.into(), level, text: text.into() });
+        let line = LogLine { t: super::audit::now(), pack: pack.into(), level, text: text.into() };
+        if let Some(path) = self.log_file.borrow().as_ref() {
+            use std::io::Write;
+            // Kept small: past a few megabytes the older half goes.
+            if std::fs::metadata(path).is_ok_and(|m| m.len() > 4 << 20)
+                && let Ok(old) = std::fs::read_to_string(path) {
+                let lines: Vec<&str> = old.lines().collect();
+                let _ = std::fs::write(path, lines[lines.len() / 2..].join("\n") + "\n");
+            }
+            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                let _ = writeln!(file, "{}", json!({ "t": line.t, "pack": line.pack, "level": line.level, "text": line.text }));
+            }
+        }
+        logs.push_back(line);
     }
     /// Drops what surfaces loaded from `pack`'s abilities, so they load again.
     pub fn invalidate(&self, pack: &str) {
