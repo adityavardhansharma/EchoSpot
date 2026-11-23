@@ -341,17 +341,33 @@ pub struct Item {
     pub accessories: Vec<Accessory>,
     /// A running app: the dot under its icon.
     pub running: bool,
+    /// What the row means (`urgent`, `live`, `muted`…): the Look decides how that shows.
+    pub intent: String,
+    /// A living icon (API-DESIGN.md §14.4): what a pack's `icon` face says to draw on it.
+    pub living: Option<Living>,
+}
+
+/// State drawn on an icon: a count, how far along something is, and whether it is live.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Living {
+    pub badge: Option<String>,
+    pub progress: Option<f32>,
+    pub pulse: bool,
 }
 
 impl Item {
     pub fn new(id: impl Into<String>, title: impl Into<String>, icon: IconSrc) -> Self {
         Self {
             id: id.into(), title: title.into(), subtitle: None, trailing: String::new(), icon,
-            actions: Vec::new(), detail: None, card: None, accessories: Vec::new(), running: false,
+            actions: Vec::new(), detail: None, card: None, accessories: Vec::new(), running: false, intent: String::new(), living: None,
         }
     }
     pub fn trailing(mut self, s: &str) -> Self {
         self.trailing = s.into();
+        self
+    }
+    pub fn living(mut self, living: Option<Living>) -> Self {
+        self.living = living;
         self
     }
     pub fn subtitle(mut self, s: impl Into<String>) -> Self {

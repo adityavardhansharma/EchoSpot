@@ -178,9 +178,9 @@ pub enum Tint {
 }
 
 impl Tint {
-    /// `(top, bottom)` of the tile's gradient.
-    pub fn stops(self) -> (Color, Color) {
-        let (top, bottom) = match self {
+    /// `(top, bottom)` of the tile's gradient, as `0xRRGGBB`.
+    pub fn hex(self) -> (u32, u32) {
+        match self {
             Tint::Violet => (0x9d7dff, 0x6a3df0),
             Tint::Indigo => (0x7c88ff, 0x4a4fe4),
             Tint::Blue => (0x4daaff, 0x0b6bf0),
@@ -192,7 +192,11 @@ impl Tint {
             Tint::Red => (0xff7b70, 0xe5352b),
             Tint::Pink => (0xff7dba, 0xe5317e),
             Tint::Graphite => (0x90909b, 0x56565f),
-        };
+        }
+    }
+    /// `(top, bottom)` of the tile's gradient.
+    pub fn stops(self) -> (Color, Color) {
+        let (top, bottom) = self.hex();
         (rgb(top, 1.0), rgb(bottom, 1.0))
     }
     /// The one colour that stands for the family: an accent, a status dot.

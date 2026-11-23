@@ -136,7 +136,25 @@ fn result_row(s: &App, p: &Palette, scale: f32, item: &Item, index: usize, selec
     if item.running {
         slot = slot.child(el().absolute(size::RESULT_ROW_ICON / 2.0 - 1.5, size::RESULT_ROW_ICON + 1.0).size(3.0, 3.0).radius(1.5).fill(p.text_secondary));
     }
-    r = r.child(slot).child(text(item.title.clone()).font(type_::ROW_TITLE).color(p.text).truncate());
+    // A living icon (§14.4): drawn the same way for every pack, whatever it asked for.
+    if let Some(living) = &item.living {
+        let edge = size::RESULT_ROW_ICON;
+        if let Some(progress) = living.progress {
+            slot = slot.child(el().absolute(1.0, edge + 1.0).size(edge - 2.0, 2.0).radius(1.0).fill(p.text_secondary.alpha(0.25))
+                .child(el().size(((edge - 2.0) * progress).max(2.0), 2.0).radius(1.0).fill(p.primary_action).motion(motion::LAYOUT)));
+        }
+        if let Some(badge) = &living.badge {
+            let label = crate::util::truncate(badge, 3);
+            let w = (label.chars().count() as f32 * 5.5 + 7.0).max(13.0);
+            slot = slot.child(row().key(format!("badge-{}", item.id)).absolute(edge - w + 4.0, -4.0).h(13.0).w(w).center().radius(6.5).fill(p.destructive)
+                .child(text(label).font(TextStyle::new(9.0, 700.0).lh(11.0)).color(Color::WHITE)));
+        }
+        if living.pulse {
+            slot = slot.looping(rune::LoopSpec::opacity(1.4, 0.0, 0.55, 1.0));
+        }
+    }
+    let meaning = crate::packs::looks::get(&s.settings.pack_look).intent(&item.intent);
+    r = r.child(slot).child(text(item.title.clone()).font(type_::ROW_TITLE).color(if meaning.quiet { p.text_secondary } else { p.text }).truncate());
     if !compact {
         if let Some(sub) = &item.subtitle {
             r = r.child(text(sub.clone()).font(type_::ROW_TRAILING).color(p.text_secondary).truncate().shrink());
@@ -163,6 +181,18 @@ fn result_row(s: &App, p: &Palette, scale: f32, item: &Item, index: usize, selec
         if !item.trailing.is_empty() {
             r = r.child(text(item.trailing.clone()).font(type_::ROW_TRAILING).color(p.text_secondary));
         }
+    }
+    // What a pack said the row means, shown the way the Look shows it.
+    if let Some(tint) = meaning.tint {
+        let accent = tint.stops().0;
+        let edge = el().absolute(0.0, 6.0).w(3.0).h(size::RESULT_ROW_ICON).radius(1.5).fill(accent).inert();
+        r = r.child(if meaning.pulse { edge.looping(rune::LoopSpec::opacity(1.4, 0.0, 0.35, 1.0)) } else { edge });
+        if !meaning.effect.is_empty() && s.packs.fx_room(index) {
+            let id = crate::packs::fx::EFFECTS.iter().position(|(n, _)| *n == meaning.effect).map_or(0.0, |i| (i + 1) as f32);
+            r = r.child(rune::effect(crate::packs::draw::FX_MARK).effect_data([id, 0.0, radius::ROW, 0.0]).effect_bleed(6.0).pin(FULL, FULL, FULL, FULL).inert());
+        }
+    } else if item.intent == "loading" {
+        r = r.looping(rune::LoopSpec::opacity(1.4, 0.0, 0.5, 1.0));
     }
     r
 }

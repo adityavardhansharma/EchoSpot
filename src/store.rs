@@ -107,6 +107,18 @@ impl IconStore {
         self.get(path, size, scale, false)
     }
 
+    /// A picture from the web, fetched once and kept.
+    pub fn url(&self, url: &str, size: f32, scale: f32) -> Option<Pixels> {
+        let cache = self.cache.as_ref()?;
+        let key = (PathBuf::from(url), (size * scale).round() as u32, false);
+        let mut images = self.images.borrow_mut();
+        let image = images.entry(key).or_insert_with(|| cache.url(url, size, scale));
+        if image.error().is_some() {
+            return None;
+        }
+        Some(image.pixels().clone())
+    }
+
     /// Whether the picture has decoded, so a view can hold its placeholder until then.
     pub fn ready(&self, path: &Path, size: f32, scale: f32, app: bool) -> bool {
         let key = (path.to_path_buf(), (size * scale).round() as u32, app);
