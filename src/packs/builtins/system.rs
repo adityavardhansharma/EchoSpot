@@ -24,4 +24,10 @@ pub fn register(out: &mut Vec<Spec>) {
         util::open_url(url);
         Run::value(json!(true))
     }));
+    // The runtime answers these itself: it holds the timeline.
+    out.push(Spec::new("timeline.list", Kind::Read, Gate::Calls, "What was done lately, newest first, and whether each can be undone", "limit:number=50", "list<record>", |_, _| Run::value(json!([]))));
+    out.push(Spec::new("timeline.undo", Kind::Effect, Gate::Calls, "Take back one thing from the timeline, by its id", "id:number", "bool", |_, _| Run::value(json!(false))));
+    // And these: it holds the registry.
+    out.push(Spec::new("echo.describe", Kind::Read, Gate::Free, "An ability's title, kind, signature and JSON Schema", "address:text", "record", |_, _| Run::value(json!({}))));
+    out.push(Spec::new("echo.search", Kind::Read, Gate::Free, "Find abilities by words in their address or title", "query:text, limit:number=20", "list<record>", |_, _| Run::value(json!([]))));
 }

@@ -820,6 +820,10 @@ impl Runtime {
             if !a.has_run {
                 return Err(PackError::new("E0300", format!("{address} has no run function: it only draws a panel")));
             }
+            if a.confirm && self.must_ask(token, address, kind) {
+                self.ask(token, address, Pending::Ability { owner, name: second.to_string(), input });
+                return Ok(());
+            }
             return self.enter(&owner, token, "__invoke", vec![Data::String(second.to_string()), to_data(&input)]);
         }
 
@@ -838,7 +842,110 @@ impl Runtime {
             self.finish(token, Done::value(Value::Null));
             return Ok(());
         }
-        match (spec.run)(&ctx, &input) {
+        // Timeline is the runtime's own: what was done, and taking it back.
+        match address {
+            "timeline.list" => {
+                let limit = input.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+                let rows: Vec<Value> = self.timeline.iter().rev().take(limit).map(|e| {
+                    let mut row = serde_json::to_value(e).unwrap_or(Value::Null);
+                    row["can_undo"] = json!(!e.undone && !e.is_final && !e.steps.is_empty());
+                    row
+                }).collect();
+                self.finish(token, Done::value(Value::Array(rows)));
+                return Ok(());
+            }
+            "timeline.undo" => {
+                let id = input.get("id").and_then(Value::as_u64).unwrap_or(0);
+                let result = self.undo(id).map(|_| Done { value: json!(true), ..Default::default() });
+                self.finish(token, result);
+                return Ok(());
+            }
+            "files.pick" if self.confirm_finals => {
+                let pack = self.frames[&token].on_behalf.clone();
+                let title = Some(input.get("title").and_then(Value::as_str).unwrap_or("")).filter(|t| !t.is_empty()).unwrap_or("Choose a File").to_string();
+                self.events.push(Event::Pick { token, pack: pack.clone(), title, folder: input.get("folder").and_then(Value::as_bool).unwrap_or(false) });
+                self.pending.insert(token, Pending::Pick { pack });
+                return Ok(());
+            }
+            "echo.describe" => {
+                let wanted = input.get("address").and_then(Value::as_str).unwrap_or("").to_string();
+                let result = super::api::describe(self, &wanted).ok_or_else(|| self.unknown(&wanted)).map(|value| Done { value, ..Default::default() });
+                self.finish(token, result);
+                return Ok(());
+            }
+            "echo.search" => {
+                let limit = input.get("limit").and_then(Value::as_u64).unwrap_or(20) as usize;
+                let found: Vec<Value> = super::api::search(self, input.get("query").and_then(Value::as_str).unwrap_or("")).into_iter().filter(|hit| hit["what"] == "ability").take(limit).collect();
+                self.finish(token, Done::value(Value::Array(found)));
+                return Ok(());
+            }
+            _ => {}
+        }
+        if self.must_ask(token, address, kind) {
+            self.ask(token, address, Pending::Spec { spec, ctx: Box::new(ctx), input });
+            return Ok(());
+        }
+        self.run_spec(token, &spec, &ctx, &input)
+    }
+
+    /// Whether a final call must wait for a person: one a person's action led to, in the app.
+    fn must_ask(&self, token: u64, address: &str, kind: Kind) -> bool {
+        if !self.confirm_finals || kind != Kind::Final || self.grants.no_confirm.contains(address) {
+            return false;
+        }
+        let mut at = token;
+        loop {
+            let Some(frame) = self.frames.get(&at) else { return false };
+            if frame.dry {
+                return false;
+            }
+            match frame.parent {
+                Some(parent) => at = parent,
+                None => return frame.root_user || frame.address.starts_with('@'),
+            }
+        }
+    }
+
+    fn ask(&mut self, token: u64, address: &str, pending: Pending) {
+        let frame = &self.frames[&token];
+        self.events.push(Event::Confirm { token, address: address.to_string(), title: frame.title.clone(), summary: summary(&frame.input, 160) });
+        self.pending.insert(token, pending);
+    }
+
+    /// A person's answer to [`Event::Confirm`]. `never_again` stops asking for this address.
+    pub fn answer_confirm(&mut self, token: u64, yes: bool, never_again: bool) {
+        let Some(pending) = self.pending.remove(&token) else { return };
+        if !yes {
+            return self.finish(token, Err(PackError::new("E0900", "cancelled: it wasn't confirmed")));
+        }
+        if never_again && let Some(address) = self.frames.get(&token).map(|f| f.address.clone()) {
+            self.grants.set_confirm(&address, false);
+        }
+        let started = match pending {
+            Pending::Pick { .. } => Ok(()),
+            Pending::Ability { owner, name, input } => self.enter(&owner, token, "__invoke", vec![Data::String(name), to_data(&input)]),
+            Pending::Spec { spec, ctx, input } => self.run_spec(token, &spec, &ctx, &input),
+        };
+        if let Err(e) = started {
+            self.finish(token, Err(e));
+        }
+    }
+
+    /// What the person picked for [`Event::Pick`], or nothing. The choice is the permission:
+    /// that path, for that pack, from now on.
+    pub fn answer_pick(&mut self, token: u64, path: Option<PathBuf>) {
+        let Some(Pending::Pick { pack }) = self.pending.remove(&token) else { return };
+        let Some(path) = path.and_then(|p| p.canonicalize().ok()) else { return self.finish(token, Done::value(Value::Null)) };
+        if !pack.is_empty() {
+            self.picked.entry(pack.clone()).or_default().push(path.clone());
+            self.grants.grant(&pack, [Ask::new("picked", path.display().to_string())]);
+        }
+        self.finish(token, Done::value(Value::String(path.display().to_string())));
+    }
+
+    fn run_spec(&mut self, token: u64, spec: &Spec, ctx: &Ctx, input: &Value) -> Result<()> {
+        let ctx = ctx.clone();
+        match (spec.run)(&ctx, input) {
             Run::Now(result) => self.finish(token, result),
             Run::Later(job) => {
                 let (tx, partial, waker, wake_partial) = (self.worker_tx.clone(), self.worker_tx.clone(), self.waker.clone(), self.waker.clone());
@@ -866,6 +973,13 @@ impl Runtime {
 
     /// Enters a pack's VM at one of `@echo`'s entry points, as a task that may wait.
     fn enter(&mut self, pack: &str, token: u64, entry: &str, args: Vec<Data>) -> Result<()> {
+        let name = match args.first() {
+            Some(Data::String(name)) => name.to_string(),
+            _ => String::new(),
+        };
+        if self.packs.get(pack).is_some_and(|p| p.in_wasm(entry, &name)) {
+            return self.enter_wasm(pack, token, entry, &name, args);
+        }
         self.ensure_vm(pack)?;
         self.shared.owners.borrow_mut().insert(token, pack.to_string());
         let script = self.packs.get(pack).and_then(|p| p.script.as_ref()).expect("ensure_vm");
@@ -912,6 +1026,17 @@ impl Runtime {
         }
         if let Err(e) = &result {
             self.shared.log(if frame.pack.is_empty() { &frame.actor } else { &frame.pack }, "error", format!("{}: {e}", frame.address));
+        }
+        self.pending.remove(&token);
+        // What a person just did may have changed what the pack's surfaces loaded.
+        if frame.parent.is_none() && !frame.pack.is_empty() && (frame.address.starts_with('@') || frame.kind != Kind::Read) {
+            self.shared.invalidate(&frame.pack);
+        }
+        if let Some(key) = self.unasked.remove(&token) {
+            self.runs.insert(key, Ran { t: audit::now(), ok: result.is_ok(), error: result.as_ref().err().map(|e| e.message.clone()).unwrap_or_default() });
+            if !self.ephemeral && let Ok(text) = serde_json::to_string(&self.runs) {
+                let _ = std::fs::write(runs_path(), text);
+            }
         }
         match frame.parent.and_then(|p| self.frames.get_mut(&p)) {
             Some(parent) => {
