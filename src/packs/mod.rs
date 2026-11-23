@@ -69,3 +69,4 @@ pub mod defs;
 pub mod docs;
 pub mod check;
 pub mod devtest;
+pub mod template;
