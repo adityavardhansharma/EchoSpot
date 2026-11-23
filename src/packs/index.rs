@@ -68,6 +68,8 @@ pub struct Ability {
     pub on: Vec<String>,
     /// How long a result stays fresh for surfaces that load it: `30m`.
     pub refresh: String,
+    /// A global hotkey the pack suggests, as `super+alt+p`. Only a person binds it, in Settings.
+    pub hotkey: String,
     pub has_run: bool,
     pub has_query: bool,
     pub has_undo: bool,
@@ -241,9 +243,12 @@ impl Index {
                 description: text(a, "description"), icon: text(a, "icon"), tint: text(a, "tint"), kind, input, output,
                 examples: texts(a, "examples"), ai: flag(a, "ai"), slots: flag(a, "slots"),
                 confirm: a.get("confirm").and_then(Value::as_bool).unwrap_or(true), hidden: flag(a, "hidden"), keywords: texts(a, "keywords"),
-                every: text(a, "every"), at: text(a, "at"), on: texts(a, "on"), refresh: text(a, "refresh"),
+                every: text(a, "every"), at: text(a, "at"), on: texts(a, "on"), refresh: text(a, "refresh"), hotkey: text(a, "hotkey").to_lowercase(),
                 has_run: flag(a, "has_run"), has_query: flag(a, "has_query"), has_undo: flag(a, "has_undo"), faces,
             };
+            if !ability.hotkey.is_empty() && crate::features::bindings::hypr_chord(&ability.hotkey).is_none() {
+                return Err(bad(format!("{at}.hotkey"), format!("hotkey = {:?} isn't a chord: modifiers and one key, as \"super+alt+p\"", ability.hotkey)));
+            }
             if !ability.has_run && !ability.has_query && !ability.faces.iter().any(|f| f == "panel") {
                 return Err(bad(at, "an ability needs a run function, a query function or a panel face".into()));
             }

@@ -233,7 +233,7 @@ local function describe_ability(a: Any): Any
 		input = if a.input ~= nil then types.plain(a.input) else nil,
 		output = if a.output ~= nil then types.plain(a.output) else nil,
 		examples = a.examples, ai = a.ai, slots = a.slots, confirm = a.confirm, hidden = a.hidden, keywords = a.keywords,
-		every = a.every, at = a.at, on = on, refresh = a.refresh,
+		every = a.every, at = a.at, on = on, refresh = a.refresh, hotkey = a.hotkey,
 		has_run = type(a.run) == "function", has_query = type(a.query) == "function", has_undo = type(a.undo) == "function",
 		faces = faces,
 	}
