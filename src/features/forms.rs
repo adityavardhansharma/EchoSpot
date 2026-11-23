@@ -89,6 +89,8 @@ pub enum Target {
     AiPreset(Option<String>),
     ExtPreferences { extension: String, then: Option<String> },
     ExtForm { session: u64 },
+    /// A pack's form: an ability's input, a `ui.Form`, a path, a report.
+    Pack(Box<crate::packs::host::PackForm>),
 }
 
 pub struct Form {
@@ -173,6 +175,7 @@ pub fn submit(app: &mut App, tx: &mut Tx) {
         Target::ScriptNew => crate::features::scripts::create(app, tx),
         Target::ExtPreferences { extension, then } => crate::ext::save_preferences(app, &extension, then, tx),
         Target::ExtForm { session } => crate::ext::submit_form(app, session, tx),
+        Target::Pack(form) => crate::packs::host::submit_form(app, *form, tx),
     }
 }
 
