@@ -264,9 +264,10 @@ impl<S: Liquid + 'static> Compositor<S> for Glass<S> {
         let m = size::WINDOW_MARGIN;
         let (w, h) = (pane.window.0 - m * 2.0, pane.window.1 - m * 2.0);
         let g = pane.level;
-        let tint = if pane.dark { rgb(0x1a1c22) } else { rgb(0xffffff) };
+        let tint = if pane.dark { rgb(0x16181d) } else { rgb(0xf7f8fa) };
         let layers = [Fx::lens(LensParams {
-            frost: g.frost.clamp(0.0, 1.0),
+            // A palette carries text: even at its lightest the glass is well frosted.
+            frost: (0.35 + 0.7 * g.frost).clamp(0.0, 1.0),
             // The bevel can't be deeper than the glass is thick.
             bevel: g.bevel.min(h * 0.45),
             depth: g.depth,
@@ -275,7 +276,11 @@ impl<S: Liquid + 'static> Compositor<S> for Glass<S> {
             rim: 0.2 + g.rim.clamp(0.0, 1.0) * 0.9,
             shadow: 0.25 + 0.4 * g.shadow.clamp(0.0, 1.0),
             tint,
-            tint_amount: g.tint.clamp(0.0, 1.0),
+            tint_amount: (0.12 + 0.8 * g.tint).clamp(0.0, 1.0),
+            adapt: 0.45,
+            sheen: 0.22,
+            // Over the live screen the glass lets some of it through, for the next frame to read.
+            opacity: if pane.through.is_some() { crate::seethrough::OPACITY } else { 1.0 },
             ..Default::default()
         }).on(Shape::rounded(m, m, w, h, radius::PANEL)).at(f.rt.t as f32)];
         let fx = &mut gpu.fx;
