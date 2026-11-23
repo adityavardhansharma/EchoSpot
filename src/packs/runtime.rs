@@ -672,9 +672,19 @@ impl Runtime {
         // Who is asking, and what they carry down.
         let (caller, parent, read_ctx, read_by, mut dry, actor, parent_no_undo) = match origin {
             Origin::Frame(parent) => match self.frames.get(parent) {
-                Some(f) => (Some(f.pack.clone()), Some(*parent), f.read_ctx, f.read_by.clone(), f.dry || dry, if f.pack.is_empty() { f.actor.clone() } else { f.pack.clone() }, f.no_undo.then(|| f.address.clone())),
+                Some(f) => {
+                    // A built-in's own calls are made for the pack that called it, never as the user.
+                    let pack = if f.pack.is_empty() { f.on_behalf.clone() } else { f.pack.clone() };
+                    let host_only = pack.is_empty() && f.spec_gate.is_some() && f.actor != "user";
+                    if host_only {
+                        return Err(PackError::new("E0400", format!("{} can't call abilities for {}", f.address, f.actor)));
+                    }
+                    (Some(pack.clone()), Some(*parent), f.read_ctx, f.read_by.clone(), f.dry || dry, if pack.is_empty() { f.actor.clone() } else { pack }, f.no_undo.then(|| f.address.clone()))
+                }
                 None => (None, None, false, String::new(), dry, "user".into(), None),
             },
+            // With no pack, the host is drawing for the person: a board tile, a default face.
+            Origin::Load(pack) if pack.is_empty() => (None, None, true, "a board tile or a default face".to_string(), dry, "user".into(), None),
             Origin::Load(pack) => (Some(pack.clone()), None, true, format!("a surface of {pack}"), dry, pack.clone(), None),
             Origin::Trigger(pack) => (Some(pack.clone()), None, false, String::new(), dry, pack.clone(), None),
             Origin::User => (None, None, false, String::new(), dry, "user".into(), None),
@@ -686,7 +696,7 @@ impl Runtime {
         let mut frame = Frame {
             pack: String::new(), address: address.to_string(), title: address.to_string(), kind: Kind::Read, read_ctx, read_by, dry, parent, respond: Some(respond),
             started: Instant::now(), input: Value::Null, steps: Vec::new(), usd: 0.0, actor, logged: false, output: None, own_undo: None, no_undo: false,
-            root_user, spec_gate: None,
+            root_user, spec_gate: None, on_behalf: String::new(),
         };
         // A scene's fixture answers before anything real is reached.
         let fixture = self.shared.scene.borrow().as_ref().and_then(|s| s.load.get(address).cloned().map(Ok).or_else(|| s.errors.get(address).map(|m| Err(m.as_str().unwrap_or("failed").to_string()))));
@@ -835,6 +845,19 @@ impl Runtime {
             frame.input = input.clone();
             frame.logged = !(kind == Kind::Read && spec.gate == Gate::Free);
             frame.spec_gate = Some(spec.gate);
+            frame.on_behalf = caller_pack.unwrap_or("").to_string();
+        }
+        // What a worker uses to call an ability under this call: an AI tool loop.
+        {
+            let (tx, waker) = (self.worker_tx.clone(), self.waker.clone());
+            ctx.caller = Some(builtins::Caller(Arc::new(move |address: &str, input: Value| {
+                let (reply, answer) = channel();
+                tx.send(WorkerMsg::Call(token, address.to_string(), input, reply)).map_err(|_| PackError::new("E0900", "EchoSpot is shutting down"))?;
+                if let Some(waker) = waker.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                    waker();
+                }
+                answer.recv_timeout(Duration::from_secs(120)).unwrap_or_else(|_| Err(PackError::new("E0900", format!("{address} gave no answer in 120 s"))))
+            })));
         }
         // A dry run stops here for anything that would change the world.
         if self.frames[&token].dry && kind != Kind::Read {
@@ -1056,6 +1079,9 @@ impl Runtime {
                 };
                 done.complete(to_data(&answer));
             }
+            Some(Responder::Channel(reply)) => {
+                let _ = reply.send(result);
+            }
             Some(Responder::Resource(key)) => {
                 let now = self.shared.clock();
                 let ttl = self.ttl_of(&frame.address);
@@ -1151,7 +1177,7 @@ impl Runtime {
         Frame {
             pack: pack.to_string(), title: address.trim_start_matches('@').to_string(), address, kind, read_ctx: kind == Kind::Read, read_by: String::new(), dry: false, parent: None,
             respond: Some(Responder::Keep), started: Instant::now(), input: Value::Null, steps: Vec::new(), usd: 0.0, actor: "user".into(), logged: false,
-            output: None, own_undo: None, no_undo: false, root_user, spec_gate: None,
+            output: None, own_undo: None, no_undo: false, root_user, spec_gate: None, on_behalf: String::new(),
         }
     }
 

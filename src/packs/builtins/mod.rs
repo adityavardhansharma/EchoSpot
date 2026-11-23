@@ -110,6 +110,18 @@ pub struct Ctx {
     pub budget_left: f64,
     /// Paths the user picked for this pack.
     pub picked: Vec<PathBuf>,
+    /// Calls another ability under this call, from a worker thread, with the caller's grants.
+    pub caller: Option<Caller>,
+}
+
+/// A way back into the broker for a built-in's worker.
+#[derive(Clone)]
+pub struct Caller(pub Arc<dyn Fn(&str, Value) -> Result<Value> + Send + Sync>);
+
+impl std::fmt::Debug for Caller {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Caller")
+    }
 }
 
 type RunFn = dyn Fn(&Ctx, &Value) -> Run + Send + Sync;
