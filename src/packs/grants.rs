@@ -48,6 +48,12 @@ impl Grants {
         Self::default()
     }
 
+    /// The same grants, never written back: what a test and a dry run hold.
+    pub fn read_only(mut self) -> Self {
+        self.path = None;
+        self
+    }
+
     fn save(&self) {
         let Some(path) = &self.path else { return };
         let Ok(text) = serde_json::to_string_pretty(self) else { return };
