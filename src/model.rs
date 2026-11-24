@@ -71,6 +71,8 @@ pub enum Act {
     Shell(String),
     /// Run through `sh -c` and report the outcome in a toast; the palette stays.
     ShellQuiet { cmd: String, done: String },
+    /// Switch Omarchy's theme: its folder's name, and the name people read.
+    Theme(String, String),
     OpenUrl(String),
     OpenPath(PathBuf),
     Reveal(PathBuf),

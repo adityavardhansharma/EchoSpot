@@ -360,10 +360,23 @@ pub fn windows(app: &App, query: &str) -> Built {
     Built::list(sections, "Search open windows...").empty("No Open Windows", "")
 }
 
+/// The theme Omarchy has on, asked once and kept: the Themes screen is rebuilt on every key
+/// typed, and asking runs a program. `forget_theme` makes the next build ask again.
+fn current_theme() -> String {
+    let mut cached = THEME.lock().unwrap_or_else(|e| e.into_inner());
+    cached.get_or_insert_with(|| util::sh_output("omarchy theme current 2>/dev/null").unwrap_or_default().to_lowercase()).clone()
+}
+
+static THEME: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+pub fn forget_theme() {
+    *THEME.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
 /// Omarchy's themes, applied with `omarchy theme set`.
 pub fn themes(_app: &App, query: &str) -> Built {
     let q = query.trim();
-    let current = util::sh_output("omarchy theme current 2>/dev/null").unwrap_or_default().to_lowercase();
+    let current = current_theme();
     let mut names: Vec<String> = Vec::new();
     for dir in [util::home().join(".config/omarchy/themes"), "/usr/share/omarchy/themes".into()] {
         if let Ok(entries) = std::fs::read_dir(dir) {
@@ -384,7 +397,7 @@ pub fn themes(_app: &App, query: &str) -> Built {
         let title = pretty(n);
         let active = current == title.to_lowercase() || current == *n;
         Item::new(format!("theme:{n}"), title.clone(), IconSrc::Badge(&icons::PALETTE, Tint::Pink)).trailing(if active { "Current" } else { "Theme" })
-            .action(Action::new("Apply Theme", &icons::CHECK, Act::ShellQuiet { cmd: format!("omarchy theme set {}", util::quote(&title)), done: format!("{title} Applied") }))
+            .action(Action::new("Apply Theme", &icons::CHECK, Act::Theme(n.clone(), title.clone())))
     }).collect();
     let mut sections = Sections::default();
     sections.push("Themes", items);

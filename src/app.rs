@@ -294,6 +294,9 @@ impl App {
         if self.top().route == Route::Schedule {
             features::calendar::refresh(self, false);
         }
+        if self.top().route == Route::Themes {
+            features::root::forget_theme();
+        }
         if self.top().route == Route::Ai {
             self.top_mut().filter = features::ai::model_filter(&self.settings.ai).1;
         }
@@ -415,6 +418,8 @@ impl App {
         }
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
         self.scripts = features::scripts::load();
+        // The theme may have been switched from elsewhere since the last summon.
+        features::root::forget_theme();
         features::calendar::refresh(self, false);
         self.packs.reload(false);
         self.chat.toolbox = crate::packs::host::toolbox(self);
@@ -666,6 +671,10 @@ impl App {
                 self.hide(tx);
             }
             Act::ShellQuiet { cmd, done } => self.run_quietly(cmd, done, |_| {}),
+            Act::Theme(name, title) => {
+                let cmd = format!("omarchy theme set {}", util::quote(&name));
+                self.run_quietly(cmd, format!("{title} Applied"), |_| features::root::forget_theme());
+            }
             Act::OpenUrl(url) => {
                 util::open_url(&url);
                 self.hide(tx);
