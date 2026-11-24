@@ -71,8 +71,8 @@ pub fn build(app: &App, query: &str) -> Built {
         }
         detail.fields.push(("Characters".into(), s.text.chars().count().to_string()));
         let item = Item::new(format!("snippet:{}", s.id), s.name.clone(), IconSrc::Badge(&icons::TEXT, crate::theme::Tint::Red))
-            .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(expand(&s.text))))
-            .action(Action::new("Copy to Clipboard", &icons::COPY, Act::Copy(expand(&s.text))).keys("ctrl+enter"))
+            .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Snippet(SnippetOp::Paste(s.id.clone()))))
+            .action(Action::new("Copy to Clipboard", &icons::COPY, Act::Snippet(SnippetOp::Copy(s.id.clone()))).keys("ctrl+enter"))
             .action(Action::new("Edit Snippet", &icons::PENCIL, Act::Snippet(SnippetOp::Edit(s.id.clone()))).keys("ctrl+e").section(""))
             .action(Action::new("Create Snippet", &icons::PLUS, Act::Snippet(SnippetOp::New)).keys("ctrl+shift+n"))
             .action(Action::new("Delete Snippet", &icons::TRASH, Act::Confirm(Box::new(Confirm {
@@ -114,6 +114,19 @@ pub fn perform(app: &mut App, op: SnippetOp, tx: &mut Tx) {
         SnippetOp::Edit(id) => {
             let existing = app.snippets.list.iter().find(|s| s.id == id).cloned();
             forms::open(app, form(existing.as_ref()), tx);
+        }
+        // Placeholders fill in as the snippet is used: `{time}` is now, `{clipboard}` what is on it now.
+        SnippetOp::Paste(id) | SnippetOp::Copy(id) if !app.snippets.list.iter().any(|s| s.id == id) => {
+            app.toast("That Snippet Is Gone", Tone::Danger);
+        }
+        SnippetOp::Paste(id) => {
+            let text = app.snippets.list.iter().find(|s| s.id == id).map(|s| expand(&s.text)).unwrap_or_default();
+            app.usage.record(&format!("snip:{id}"));
+            app.perform(Act::Paste(text), tx);
+        }
+        SnippetOp::Copy(id) => {
+            let text = app.snippets.list.iter().find(|s| s.id == id).map(|s| expand(&s.text)).unwrap_or_default();
+            app.perform(Act::Copy(text), tx);
         }
         SnippetOp::Delete(id) => {
             app.snippets.list.retain(|s| s.id != id);

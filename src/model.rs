@@ -214,6 +214,9 @@ pub enum SnippetOp {
     New,
     Edit(String),
     Delete(String),
+    /// Fill a snippet's placeholders now and paste it, or copy it.
+    Paste(String),
+    Copy(String),
 }
 
 #[derive(Clone, Copy, Debug)]

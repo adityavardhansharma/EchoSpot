@@ -176,8 +176,8 @@ fn entries(app: &App) -> Vec<Entry> {
     for s in &app.snippets.list {
         let id = format!("snip:{}", s.id);
         let item = Item::new(id.clone(), s.name.clone(), IconSrc::Badge(&icons::TEXT, Tint::Red)).trailing("Snippet")
-            .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(crate::features::snippets::expand(&s.text))))
-            .action(Action::new("Copy to Clipboard", &icons::COPY, Act::Copy(crate::features::snippets::expand(&s.text))).keys("ctrl+shift+c"));
+            .action(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Snippet(SnippetOp::Paste(s.id.clone()))))
+            .action(Action::new("Copy to Clipboard", &icons::COPY, Act::Snippet(SnippetOp::Copy(s.id.clone()))).keys("ctrl+shift+c"));
         out.push(Entry { item, keywords: format!("{} {}", s.keyword, util::truncate(&s.text, 60)) });
     }
     out.extend(crate::ext::commands(app).into_iter().map(|(item, keywords)| Entry { item, keywords }));
