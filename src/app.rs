@@ -665,11 +665,7 @@ impl App {
                 util::sh_detached(&cmd);
                 self.hide(tx);
             }
-            Act::ShellQuiet { cmd, done } => {
-                let ok = util::sh_ok(&cmd);
-                self.toast(if ok { done } else { "Command Failed".into() }, if ok { Tone::Success } else { Tone::Danger });
-                self.refresh();
-            }
+            Act::ShellQuiet { cmd, done } => self.run_quietly(cmd, done, |_| {}),
             Act::OpenUrl(url) => {
                 util::open_url(&url);
                 self.hide(tx);
@@ -795,6 +791,36 @@ impl App {
             }
             Act::Quit => tx.quit(),
         }
+    }
+
+    /// Runs a shell command off the UI thread (a theme switch takes seconds), with a toast
+    /// while it runs and its outcome after. `after` runs on the palette once it succeeded.
+    pub fn run_quietly(&mut self, cmd: String, done: String, after: impl FnOnce(&mut App) + Send + 'static) {
+        let Some(me) = self.me.clone() else {
+            let ok = util::sh_ok(&cmd);
+            if ok {
+                after(self);
+            }
+            self.toast(if ok { done } else { "Command Failed".into() }, if ok { Tone::Success } else { Tone::Danger });
+            return self.refresh_keeping();
+        };
+        self.toast_progress("Working…");
+        std::thread::spawn(move || {
+            let ok = util::sh_ok(&cmd);
+            me.update(move |s: &mut App, _| {
+                if ok {
+                    after(s);
+                }
+                let (text, tone) = if ok { (done, Tone::Success) } else { ("Command Failed".to_string(), Tone::Danger) };
+                if s.visible {
+                    s.toast(text, tone);
+                    s.refresh_keeping();
+                } else {
+                    s.toast = None;
+                    crate::hud::show(&text, tone);
+                }
+            });
+        });
     }
 
     /// Runs a launcher row's primary action by its id, as a hotkey or `echospot run` asks.

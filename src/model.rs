@@ -203,6 +203,8 @@ pub enum EmojiOp {
 pub enum FileOp {
     /// Leave a folder, and everything in it, out of Search Files from now on.
     Exclude(PathBuf),
+    /// Move a file or folder to the Trash; it leaves the results with it.
+    Trash(PathBuf),
 }
 
 #[derive(Clone, Debug)]

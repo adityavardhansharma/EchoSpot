@@ -252,7 +252,7 @@ fn item(path: &Path) -> Item {
         .action(Action::new("File Search Settings…", &icons::GEAR, Act::OpenSettings("files".into())))
         .action(Action::new("Move to Trash", &icons::TRASH, Act::Confirm(Box::new(Confirm {
             title: "Move to Trash?".into(), message: util::tilde(path), icon: &icons::TRASH, confirm: "Move to Trash".into(), destructive: true,
-            act: Act::ShellQuiet { cmd: format!("gio trash {}", util::quote(&path.display().to_string())), done: "Moved to Trash".into() },
+            act: Act::File(FileOp::Trash(path.to_path_buf())),
         }))).keys("ctrl+x").destructive())
         .detail(detail)
 }
@@ -273,6 +273,11 @@ pub fn perform(app: &mut App, op: FileOp, _tx: &mut rune::Tx) {
             app.toast(format!("{} Excluded from Search", util::truncate(&name, 28)), Tone::Success);
             // The results on screen were found before the folder was excluded.
             app.refresh();
+        }
+        FileOp::Trash(path) => {
+            let cmd = format!("gio trash {}", util::quote(&path.display().to_string()));
+            // The search that found it isn't asked again: the one hit goes.
+            app.run_quietly(cmd, "Moved to Trash".into(), move |s| s.files.hits.retain(|hit| *hit != path));
         }
     }
 }
