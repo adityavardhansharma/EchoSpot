@@ -20,5 +20,6 @@ pub mod root;
 pub mod scripts;
 pub mod snap;
 pub mod snippets;
+pub mod summon;
 pub mod system;
 pub mod windows;
