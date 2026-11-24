@@ -137,6 +137,20 @@ fn main() {
             return;
         }
         "calc" => return features::calc::cli(&args[1..].join(" ")),
+        // The shortcut that summons the palette: shown, or changed (`echospot shortcut super+alt+space`).
+        "shortcut" => {
+            match args.get(1) {
+                None => println!("{}", features::summon::current()),
+                Some(chord) => match features::summon::set(chord) {
+                    Ok(()) => println!("{}", features::summon::current()),
+                    Err(why) => {
+                        eprintln!("echospot shortcut: {why}");
+                        std::process::exit(1);
+                    }
+                },
+            }
+            return;
+        }
         "debug-icons" => {
             for app in features::apps::scan() {
                 println!("{:<30} {:<36} {}", app.name, app.icon_name, app.icon.map(|p| p.display().to_string()).unwrap_or_else(|| "MISSING".into()));
@@ -145,7 +159,7 @@ fn main() {
         }
         "--version" | "-V" => return println!("echospot {}", env!("CARGO_PKG_VERSION")),
         "--help" | "-h" | "help" => {
-            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snap|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot mcp serve    offer every pack ability as an MCP tool, over stdio\n  echospot dev          build and check packs (echospot dev help)\n  echospot call <address> [--json '{{…}}'] call an ability\n  echospot bar <address>                   a JSON line per update, for Waybar\n  echospot fork <id>    copy a system pack into your packs\n  echospot agent install                   write the skill for coding agents\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
+            return println!("echospot — a command palette for Hyprland\n\n  echospot              start the resident palette (hidden)\n  echospot toggle       show or hide it\n  echospot show | hide\n  echospot open <clipboard|emoji|files|windows|snap|snippets|quicklinks|store|ai>\n  echospot settings\n  echospot shortcut [chord]   show or change the shortcut that summons it\n  echospot ext <search|install> <query>\n  echospot calc <expression>\n  echospot backup [file] [--with-keys]\n  echospot restore <file>\n  echospot mcp          list MCP servers and their tools\n  echospot mcp serve    offer every pack ability as an MCP tool, over stdio\n  echospot dev          build and check packs (echospot dev help)\n  echospot call <address> [--json '{{…}}'] call an ability\n  echospot bar <address>                   a JSON line per update, for Waybar\n  echospot fork <id>    copy a system pack into your packs\n  echospot agent install                   write the skill for coding agents\n  echospot commands     list every launcher row's id\n  echospot run <id>     run a launcher row, as its hotkey does\n  echospot quit");
         }
         _ => {}
     }
