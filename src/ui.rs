@@ -223,7 +223,6 @@ fn empty_state(p: &Palette, screen: &Screen) -> El {
     c
 }
 
-/// A palette list's scroll viewport: it fills the panel and dissolves under the bars.
 /// A palette list's scroll viewport. It runs under the bottom bar, where rows dissolve over a
 /// long band, but stops short of the header: a row leaving the top fades out within a few points
 /// of the search field instead of sliding through its text.
@@ -320,6 +319,8 @@ fn split_body(s: &App, p: &Palette, scale: f32, screen: &Screen) -> El {
 }
 
 fn grid_body(s: &App, p: &Palette, scale: f32, screen: &Screen, columns: usize) -> El {
+    // A pack can ask for any number of columns; none would divide the width by zero.
+    let columns = columns.max(1);
     if screen.items.is_empty() {
         return el().pin(FULL, FULL, FULL, FULL).child(empty_state(p, screen));
     }

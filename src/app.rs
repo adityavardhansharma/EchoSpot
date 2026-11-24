@@ -483,6 +483,7 @@ impl App {
 
     /// Moves through a grid by its sections' rows, so a short last row doesn't trap the selection.
     fn step_grid(&mut self, dx: i32, dy: i32, columns: usize, tx: &mut Tx) {
+        let columns = columns.max(1);
         if dx != 0 {
             return self.step(dx, tx);
         }
