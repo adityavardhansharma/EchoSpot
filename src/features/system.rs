@@ -266,8 +266,9 @@ pub fn run(action: SystemAction) -> Outcome {
             say(if on { "Wi-Fi Off" } else { "Wi-Fi On" })
         }
         ToggleBluetooth => {
-            let on = sh_output("bluetoothctl show").is_some_and(|s| s.contains("Powered: yes"));
-            sh_ok(if on { "bluetoothctl power off" } else { "bluetoothctl power on" });
+            // bluetoothctl waits on its daemon, and this runs as the row is picked.
+            let on = sh_output("timeout 2 bluetoothctl show").is_some_and(|s| s.contains("Powered: yes"));
+            sh_ok(if on { "timeout 4 bluetoothctl power off" } else { "timeout 4 bluetoothctl power on" });
             say(if on { "Bluetooth Off" } else { "Bluetooth On" })
         }
         ToggleNightLight => {
