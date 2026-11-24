@@ -133,19 +133,36 @@ pub struct SettingsUi {
     selected: Option<String>,
     /// A row to select and scroll to once the palette's list arrives.
     reveal: Option<String>,
-    /// The alias being typed, whose row it is, and what it was before, for Escape.
+    /// The alias being typed, while `editing` is an alias.
     pub alias: TextEdit,
-    alias_for: Option<String>,
-    alias_before: String,
-    /// The row whose hotkey is being recorded, the modifiers held so far, and why the last
-    /// chord pressed was not taken.
-    recording: Option<String>,
-    held: Mods,
-    record_error: String,
+    /// What the Commands table is in the middle of: nothing, an alias, or a hotkey.
+    editing: Editing,
     /// The packs as the palette's runtime last described them (API-DESIGN.md §9.1, §12, §15, §23).
     packs: crate::packs::host::Snapshot,
     /// The destructive button pressed once, waiting for the press that confirms it.
     armed: Option<String>,
+}
+
+/// The one thing a row of the Commands table can be in the middle of. An alias and a recording
+/// can never both be under way, and each carries what only it needs.
+#[derive(Clone, PartialEq, Default)]
+enum Editing {
+    #[default]
+    None,
+    /// The alias of this row is being typed; `before` is what Escape puts back.
+    Alias { id: String, before: String },
+    /// This row's hotkey is being recorded: the modifiers held so far, and why the last chord
+    /// pressed was not taken.
+    Recording { id: String, held: Mods, error: String },
+}
+
+impl Editing {
+    fn alias_for(&self) -> Option<&str> {
+        match self { Editing::Alias { id, .. } => Some(id), _ => None }
+    }
+    fn recording(&self) -> Option<&str> {
+        match self { Editing::Recording { id, .. } => Some(id), _ => None }
+    }
 }
 
 fn row_key(id: &str) -> String {
@@ -166,8 +183,7 @@ impl SettingsUi {
             api_key: TextEdit::new("").secure(), system_prompt: TextEdit::new(""), extensions: Vec::new(), fetched: Default::default(), check: 0, clipboard: (0, 0, 0), chats: 0, drives: Vec::new(), exclude: TextEdit::new(""), exclude_error: String::new(),
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
-            selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
-            recording: None, held: Mods::default(), record_error: String::new(), packs: Default::default(), armed: None,
+            selected: None, reveal: None, alias: TextEdit::new(""), editing: Editing::None, packs: Default::default(), armed: None,
         };
         ui.reload();
         ui
@@ -424,10 +440,10 @@ impl SettingsUi {
     }
 
     fn select(&mut self, id: &str) {
-        if self.recording.as_deref() != Some(id) {
+        if self.editing.recording() != Some(id) {
             self.stop_recording();
         }
-        if self.alias_for.as_deref() != Some(id) {
+        if self.editing.alias_for() != Some(id) {
             self.end_alias(false);
         }
         self.selected = Some(id.to_string());
@@ -461,32 +477,32 @@ impl SettingsUi {
     }
 
     fn alias_editing(&self) -> bool {
-        self.alias_for.is_some() && self.alias.focused
+        self.editing.alias_for().is_some() && self.alias.focused
     }
 
     fn begin_alias(&mut self, id: &str) {
         self.stop_recording();
         self.select(id);
-        self.alias_before = self.bindings.aliases.get(id).cloned().unwrap_or_default();
-        self.alias.replace_text(self.alias_before.clone());
-        self.alias_for = Some(id.to_string());
+        let before = self.bindings.aliases.get(id).cloned().unwrap_or_default();
+        self.alias.replace_text(before.clone());
+        self.editing = Editing::Alias { id: id.to_string(), before };
         self.alias.focused = true;
         self.filter.focused = false;
     }
 
     /// The alias field changed: it is the row's alias from this keystroke on.
     fn alias_changed(&mut self) {
-        let Some(id) = self.alias_for.clone() else { return };
+        let Some(id) = self.editing.alias_for().map(str::to_string) else { return };
         self.bindings.set_alias(&id, &self.alias.text);
         self.push_bindings(false);
     }
 
     /// Leaves the alias field, with what was typed or, for Escape, with what was there before.
     fn end_alias(&mut self, restore: bool) {
-        let Some(id) = self.alias_for.take() else { return };
+        let Editing::Alias { id, before } = std::mem::take(&mut self.editing) else { return };
         self.alias.focused = false;
-        if restore && self.bindings.aliases.get(&id).map(String::as_str).unwrap_or("") != self.alias_before {
-            self.bindings.set_alias(&id, &self.alias_before.clone());
+        if restore && self.bindings.aliases.get(&id).map(String::as_str).unwrap_or("") != before {
+            self.bindings.set_alias(&id, &before);
             self.push_bindings(false);
         }
     }
@@ -498,35 +514,37 @@ impl SettingsUi {
         self.end_alias(false);
         self.filter.focused = false;
         tx.blur();
-        if self.recording.is_none() {
+        if self.editing.recording().is_none() {
             tell_main(|app| app.bindings.suspend());
         }
-        self.recording = Some(id.to_string());
-        self.held = Mods::default();
-        self.record_error.clear();
+        self.editing = Editing::Recording { id: id.to_string(), held: Mods::default(), error: String::new() };
     }
 
     /// Stops listening without a change, and has the palette take its hotkeys back.
     fn stop_recording(&mut self) {
-        if self.recording.take().is_some() {
-            self.record_error.clear();
+        if self.editing.recording().is_some() {
+            self.editing = Editing::None;
             tell_main(|app| app.bindings.apply());
         }
     }
 
     fn set_hotkey(&mut self, id: &str, chord: &str) {
         self.bindings.set_hotkey(id, chord);
-        self.recording = None;
-        self.record_error.clear();
+        if self.editing.recording().is_some() {
+            self.editing = Editing::None;
+        }
+        // Applying registers the hotkeys again, the ones a recording let go of included.
         self.push_bindings(true);
     }
 
     /// A key while a hotkey is being recorded. Escape keeps what was there, Backspace removes
     /// it, and anything else is the hotkey if Hyprland can bind it and no other row has it.
     fn record_key(&mut self, ev: &KeyEvent, base: Option<char>) {
-        let Some(id) = self.recording.clone() else { return };
+        let Some(id) = self.editing.recording().map(str::to_string) else { return };
         if let Key::Modifier { .. } = ev.key {
-            self.held = ev.mods;
+            if let Editing::Recording { held, .. } = &mut self.editing {
+                *held = ev.mods;
+            }
             return;
         }
         let m = ev.mods;
@@ -536,12 +554,14 @@ impl SettingsUi {
             Key::Backspace | Key::Delete if bare => self.set_hotkey(&id, ""),
             _ => {
                 let Some(chord) = bindings::chord_of(ev, base) else { return };
-                if bindings::hypr_chord(&chord).is_none() {
-                    self.record_error = "Add Super, Ctrl or Alt".into();
-                } else if let Some(other) = self.bindings.holder(&chord, &id) {
-                    self.record_error = format!("Used by {}", self.title_of(other));
+                let refused = if bindings::hypr_chord(&chord).is_none() {
+                    Some("Add Super, Ctrl or Alt".to_string())
                 } else {
-                    self.set_hotkey(&id, &chord);
+                    self.bindings.holder(&chord, &id).map(|other| format!("Used by {}", self.title_of(other)))
+                };
+                match refused {
+                    Some(why) => if let Editing::Recording { error, .. } = &mut self.editing { *error = why },
+                    None => self.set_hotkey(&id, &chord),
                 }
             }
         }
@@ -940,7 +960,7 @@ fn empty_cell(p: &Palette, key: String, width: f32, hint: &str, shown: bool) -> 
 
 fn alias_cell(ui: &SettingsUi, p: &Palette, c: &Command, selected: bool) -> El {
     let id = c.id.clone();
-    if ui.alias_for.as_deref() == Some(&c.id) && ui.alias.focused {
+    if ui.editing.alias_for() == Some(&c.id) && ui.alias.focused {
         return field_box(p, "alias", true).w(ALIAS_W).h(CONTROL_H).px(space::MD)
             .child(text_input(&ui.alias, CONTROL).key("alias").single_line().grow(1.0).color(p.text)
                 .placeholder("Alias", p.text_tertiary).no_focus_ring()
@@ -963,12 +983,11 @@ fn alias_cell(ui: &SettingsUi, p: &Palette, c: &Command, selected: bool) -> El {
 
 fn hotkey_cell(ui: &SettingsUi, p: &Palette, c: &Command, selected: bool) -> El {
     let id = c.id.clone();
-    if ui.recording.as_deref() == Some(&c.id) {
-        let failed = !ui.record_error.is_empty();
-        let m = ui.held;
+    if let Editing::Recording { id: recording, held: m, error } = &ui.editing && recording == &c.id {
+        let failed = !error.is_empty();
         let held: Vec<&str> = [(m.logo, "super"), (m.ctrl || m.cmd, "ctrl"), (m.alt, "alt"), (m.shift, "shift")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect();
         let inside = if failed {
-            text(ui.record_error.clone()).font(CONTROL).color(p.destructive).truncate().grow(1.0)
+            text(error.clone()).font(CONTROL).color(p.destructive).truncate().grow(1.0)
         } else if held.is_empty() {
             text("Press a hotkey…").font(CONTROL).color(p.text_secondary).grow(1.0)
         } else {
@@ -1060,7 +1079,7 @@ fn commands(ui: &SettingsUi, p: &Palette, scale: f32) -> El {
         .child(header)
         .child(el().w_full().h(size::HAIRLINE).fill(p.separator.alpha(if p.dark { 0.08 } else { 0.09 })))
         .child(body);
-    let note = if ui.recording.is_some() {
+    let note = if ui.editing.recording().is_some() {
         "Press the keys to use, with Super, Ctrl or Alt among them. ⌫ removes the hotkey; esc keeps the old one.".to_string()
     } else {
         let assigned = ui.commands.iter().filter(|c| ui.bindings.aliases.contains_key(&c.id) || ui.bindings.hotkeys.contains_key(&c.id)).count();
@@ -1556,7 +1575,7 @@ fn close(ui: &mut SettingsUi, tx: &mut Tx) {
 
 pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
     // A hotkey being recorded takes every key, the window's own shortcuts included.
-    if ui.recording.is_some() {
+    if ui.editing.recording().is_some() {
         ui.record_key(ev, tx.key_base());
         return true;
     }
