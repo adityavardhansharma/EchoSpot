@@ -347,10 +347,11 @@ pub fn create(app: &mut App, tx: &mut Tx) {
         "node" => ("js", "//", if argument.is_empty() { "console.log(\"Hello from EchoSpot\");\n" } else { "console.log(`Hello, ${process.argv[2]}`);\n" }),
         _ => ("sh", "#", if argument.is_empty() { "echo \"Hello from EchoSpot\"\n" } else { "echo \"Hello, $1\"\n" }),
     };
-    let mut path = dir().join(format!("{}.{ext}", if slug.is_empty() { "script" } else { &slug }));
+    let base = if slug.is_empty() { "script".to_string() } else { slug };
+    let mut path = dir().join(format!("{base}.{ext}"));
     let mut n = 2;
     while path.exists() {
-        path = dir().join(format!("{slug}-{n}.{ext}"));
+        path = dir().join(format!("{base}-{n}.{ext}"));
         n += 1;
     }
     let mut text = format!("#!/usr/bin/env {language}\n\n{comment} @raycast.schemaVersion 1\n{comment} @raycast.title {title}\n{comment} @raycast.mode {mode}\n{comment} @raycast.packageName Scripts\n");
