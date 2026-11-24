@@ -987,6 +987,12 @@ pub fn perform(app: &mut App, op: AiOp, tx: &mut Tx) {
         AiOp::Retry => {
             if let Some(question) = app.chat.take_last_question() {
                 let ai = app.settings.ai.clone();
+                // The files that went with the question go with it again.
+                for path in question.attachments {
+                    if !app.chat.pending.contains(&path) {
+                        app.chat.pending.push(path);
+                    }
+                }
                 app.chat.send_shown(&ai, &question.text, question.shown);
                 app.refresh();
                 tx.scroll_to_bottom("chat");
