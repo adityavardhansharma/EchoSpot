@@ -113,11 +113,16 @@ fn read_device(mut file: std::fs::File, state: &Mutex<Typing>) {
 #[derive(Default)]
 pub struct Typing {
     buffer: String,
-    shift: bool,
-    /// Ctrl, Alt or Super held: a shortcut, not text.
-    chord: u8,
+    /// The modifier keys down now, one bit each (see `MODIFIERS`). Each key is followed on its
+    /// own, so letting go of one Shift while the other is held still types capitals, and a
+    /// release that never came (the keyboard unplugged) is forgotten on that key's next press.
+    held: u8,
     last: Option<Instant>,
 }
+
+/// The modifier keys, by key code: Left and Right Shift, then Ctrl, Alt and Super, each pair.
+const MODIFIERS: [u16; 8] = [42, 54, 29, 97, 56, 100, 125, 126];
+const SHIFTS: u8 = 0b11;
 
 /// The character a key types on a US layout.
 fn character(code: u16, shift: bool) -> Option<char> {
@@ -142,17 +147,13 @@ impl Typing {
     /// Takes one key event. When it completes a keyword: how many characters to erase, and the
     /// snippet's text.
     pub fn key(&mut self, code: u16, value: i32, table: &[(String, String)], now: Instant) -> Option<(usize, String)> {
-        match code {
-            42 | 54 => {
-                self.shift = value != 0;
-                return None;
-            }
-            29 | 97 | 56 | 100 | 125 | 126 => {
-                self.chord = if value == 0 { self.chord.saturating_sub(1) } else if value == 1 { self.chord + 1 } else { self.chord };
+        if let Some(bit) = MODIFIERS.iter().position(|m| *m == code) {
+            if value == 0 { self.held &= !(1 << bit) } else { self.held |= 1 << bit }
+            // Ctrl, Alt or Super: a shortcut is coming, not text.
+            if bit >= 2 {
                 self.buffer.clear();
-                return None;
             }
-            _ => {}
+            return None;
         }
         // Releases type nothing; a held key repeating is still typing.
         if value == 0 {
@@ -162,7 +163,7 @@ impl Typing {
             self.buffer.clear();
         }
         self.last = Some(now);
-        if self.chord > 0 {
+        if self.held & !SHIFTS != 0 {
             self.buffer.clear();
             return None;
         }
@@ -176,7 +177,7 @@ impl Typing {
             _ => {}
         }
         // Return, Escape, Tab, the arrows: the caret has gone somewhere the buffer cannot follow.
-        let Some(c) = character(code, self.shift) else {
+        let Some(c) = character(code, self.held & SHIFTS != 0) else {
             self.buffer.clear();
             return None;
         };
@@ -286,5 +287,20 @@ mod tests {
         t.key(46, 1, &table, Instant::now());
         t.key(29, 0, &table, Instant::now());
         assert_eq!(type_text(&mut t, "b", &table), None);
+        // Both Shifts down, one let go: still capitals.
+        let table = vec![("ZZ".to_string(), "sleep".to_string())];
+        let mut t = Typing::default();
+        t.key(42, 1, &table, Instant::now());
+        t.key(54, 1, &table, Instant::now());
+        t.key(54, 0, &table, Instant::now());
+        t.key(44, 1, &table, Instant::now());
+        assert_eq!(t.key(44, 1, &table, Instant::now()), Some((2, "sleep".into())));
+        // A Ctrl pressed twice with no release between is one key held, not two: one release frees it.
+        let table = vec![("brb".to_string(), "be right back".to_string())];
+        let mut t = Typing::default();
+        t.key(29, 1, &table, Instant::now());
+        t.key(29, 1, &table, Instant::now());
+        t.key(29, 0, &table, Instant::now());
+        assert_eq!(type_text(&mut t, " brb", &table), Some((3, "be right back".into())));
     }
 }
