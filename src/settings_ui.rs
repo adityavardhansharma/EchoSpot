@@ -625,6 +625,7 @@ pub fn open(pane: &str) {
         "clipboard" => Some(Pane::Clipboard),
         "files" => Some(Pane::Files),
         "extensions" => Some(Pane::Extensions),
+        "packs" => Some(Pane::Packs),
         "shortcuts" => Some(Pane::Shortcuts),
         "about" => Some(Pane::About),
         "general" => Some(Pane::General),
