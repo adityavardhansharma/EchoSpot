@@ -63,7 +63,7 @@ impl Settings {
     pub fn load() -> Self {
         let path = Self::path();
         if !path.exists() {
-            util::write_json(&path, &Settings::default());
+            util::write_json_private(&path, &Settings::default());
         }
         let mut settings: Settings = util::read_json(&path);
         settings.ai.normalize();
@@ -75,11 +75,8 @@ impl Settings {
         settings
     }
     pub fn save(&self) {
-        let path = Self::path();
-        util::write_json(&path, self);
         // The file can hold an API key: readable by this user only.
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        util::write_json_private(&Self::path(), self);
     }
     /// The panel is a pane of Liquid Glass rather than one of the Surface setting's materials.
     pub fn liquid(&self) -> bool {

@@ -695,10 +695,8 @@ pub fn save_preferences(app: &mut App, extension: &str, then: Option<String>, tx
         saved.insert(field.id.clone(), value);
     }
     let path = prefs_path(&ext.name);
-    util::write_json(&path, &saved);
     // Preferences can hold API keys: readable by this user only.
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    util::write_json_private(&path, &saved);
     app.pop(tx);
     match then {
         Some(command) => perform(app, ExtAct::Run(ext.id, command), tx),

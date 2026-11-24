@@ -327,9 +327,9 @@ impl Control {
 fn post(job: &Job, body: &Value, control: &Control) -> Result<(std::process::ChildStdout, std::path::PathBuf), String> {
     static SERIAL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let body_path = util::runtime_dir().join(format!("echospot-ai-{}-{}.json", std::process::id(), SERIAL.fetch_add(1, Ordering::Relaxed)));
-    std::fs::write(&body_path, body.to_string()).map_err(|_| "Could not write the request.".to_string())?;
-    use std::os::unix::fs::PermissionsExt;
-    let _ = std::fs::set_permissions(&body_path, std::fs::Permissions::from_mode(0o600));
+    if !util::write_file(&body_path, body.to_string().as_bytes(), 0o600) {
+        return Err("Could not write the request.".to_string());
+    }
     let mut config = format!("url = \"{}\"\ndata = \"@{}\"\n", job.url, body_path.display());
     for header in job.headers.iter().map(String::as_str).chain(["content-type: application/json"]) {
         config.push_str(&format!("header = \"{}\"\n", header.replace('\\', "\\\\").replace('"', "\\\"")));

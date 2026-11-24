@@ -110,11 +110,38 @@ pub fn read_json<T: serde::de::DeserializeOwned + Default>(path: &std::path::Pat
 
 /// Writes through a temp file, so a crash mid-write never leaves half a store.
 pub fn write_json<T: serde::Serialize>(path: &std::path::Path, value: &T) {
+    write_json_mode(path, value, 0o644);
+}
+
+/// `write_json` for a file that can hold a key or a conversation: readable by this user only,
+/// from the moment it exists, not after a chmod that leaves a moment it is anyone's to read.
+pub fn write_json_private<T: serde::Serialize>(path: &std::path::Path, value: &T) {
+    write_json_mode(path, value, 0o600);
+}
+
+fn write_json_mode<T: serde::Serialize>(path: &std::path::Path, value: &T, mode: u32) {
     let Ok(text) = serde_json::to_string_pretty(value) else { return };
-    let tmp = path.with_extension("tmp");
-    if std::fs::write(&tmp, text).is_ok() {
-        let _ = std::fs::rename(&tmp, path);
+    write_file(path, text.as_bytes(), mode);
+}
+
+/// Writes a file whole through a temp file beside it, created with `mode`.
+pub fn write_file(path: &std::path::Path, bytes: &[u8], mode: u32) -> bool {
+    use std::io::Write;
+    use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+    // The temp file's name is the whole file name plus a suffix, so `a.json` and `a.toml` in one
+    // folder never share it.
+    let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    name.push(format!(".{}.tmp", std::process::id()));
+    let tmp = path.with_file_name(name);
+    let written = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(mode).open(&tmp)
+        .and_then(|mut f| f.write_all(bytes));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return false;
     }
+    // A temp file left by a crash may have been made with another mode.
+    let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode));
+    std::fs::rename(&tmp, path).is_ok()
 }
 
 pub fn now_secs() -> u64 {

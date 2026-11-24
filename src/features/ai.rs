@@ -421,9 +421,7 @@ impl Chat {
         let title = self.messages.first().map(|m| util::truncate(m.display().lines().next().unwrap_or("").trim(), 80)).unwrap_or_default();
         let messages = self.messages.iter().filter(|m| !m.text.is_empty()).cloned().collect();
         let path = chats_dir().join(format!("{}.json", self.id));
-        util::write_json(&path, &Thread { id: self.id, title, updated: util::now_secs(), messages, system: self.system.clone() });
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+        util::write_json_private(&path, &Thread { id: self.id, title, updated: util::now_secs(), messages, system: self.system.clone() });
     }
 
     /// Drops the last exchange and hands back its question, to ask again.
