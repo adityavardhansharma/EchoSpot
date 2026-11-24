@@ -999,7 +999,7 @@ impl App {
             Key::Left if plain && empty_query && matches!(layout, Layout::Grid { .. }) => self.step(-1, tx),
             Key::PageDown => self.step(8, tx),
             Key::PageUp => self.step(-8, tx),
-            Key::Escape if self.top().route == Route::Ai && self.chat.streaming => {
+            Key::Escape if self.top().route == Route::Ai && self.chat.streaming() => {
                 self.chat.cancel();
                 self.refresh();
             }

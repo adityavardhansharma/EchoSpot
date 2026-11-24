@@ -371,7 +371,6 @@ pub struct Chat {
     /// screen is a chat that keeps its thread.
     pub quick: bool,
     pub messages: Vec<Message>,
-    pub streaming: bool,
     pub error: Option<String>,
     /// What the model is doing while no text arrives: searching, using a tool.
     pub status: Option<String>,
@@ -437,8 +436,12 @@ impl Chat {
     pub fn cancel(&mut self) {
         self.control.cancel();
         self.rx = None;
-        self.streaming = false;
         self.status = None;
+    }
+
+    /// Whether a reply is on its way: exactly while there is a stream to read it from.
+    pub fn streaming(&self) -> bool {
+        self.rx.is_some()
     }
 
     pub fn last_answer(&self) -> Option<&str> {
@@ -502,7 +505,6 @@ impl Chat {
             return;
         }
         self.rx = Some(rx);
-        self.streaming = true;
     }
 
     /// Lands streamed text; true when anything changed.
@@ -510,7 +512,20 @@ impl Chat {
         let Some(rx) = &self.rx else { return false };
         let mut changed = false;
         let mut finished = false;
-        while let Ok(chunk) = rx.try_recv() {
+        loop {
+            let chunk = match rx.try_recv() {
+                Ok(chunk) => chunk,
+                Err(std::sync::mpsc::TryRecvError::Empty) => break,
+                // The request's thread ended without saying Done (it panicked): the reply is over.
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    if self.messages.last().is_some_and(|m| m.role == Role::Assistant && m.text.is_empty()) && self.error.is_none() {
+                        self.error = Some("The request stopped without an answer.".into());
+                    }
+                    changed = true;
+                    finished = true;
+                    break;
+                }
+            };
             changed = true;
             match chunk {
                 Chunk::Text(t) => {
@@ -717,7 +732,7 @@ fn chat_actions(app: &App, asking: bool) -> Vec<Action> {
     let mut actions = Vec::new();
     // In Quick AI the question stays in the field: it is a new one only once it is edited.
     let asking = asking && !(app.chat.quick && app.chat.messages.first().is_some_and(|m| m.text.trim() == app.query().trim()));
-    if app.chat.streaming {
+    if app.chat.streaming() {
         actions.push(Action::new("Stop", &icons::X, Act::Ai(AiOp::Stop)));
     } else if asking || app.chat.messages.is_empty() {
         actions.push(Action::new("Ask AI", &icons::AI, Act::Ai(AiOp::Send)));
@@ -728,7 +743,7 @@ fn chat_actions(app: &App, asking: bool) -> Vec<Action> {
         actions.push(Action::new("Copy Answer", &icons::COPY, Act::Copy(answer.to_string())).keys("ctrl+shift+c"));
         actions.push(Action::new(app.paste_target(), &icons::CLIPBOARD, Act::Paste(answer.to_string())).keys("ctrl+enter"));
     }
-    if !app.chat.streaming && !app.chat.messages.is_empty() {
+    if !app.chat.streaming() && !app.chat.messages.is_empty() {
         if app.chat.quick {
             actions.push(Action::new("Continue in Chat", &icons::CHAT, Act::Ai(AiOp::Continue)).keys("ctrl+t"));
         }
@@ -762,7 +777,7 @@ pub fn build(app: &App, query: &str) -> Built {
         let mut built = Built::list(Sections::default(), placeholder).keep().filters(&model_names);
         built.items = vec![item];
         built.rows = vec![Row::Item(0)];
-        built.loading = app.chat.streaming;
+        built.loading = app.chat.streaming();
         return built;
     }
     // Nothing asked yet: what could be, as rows. Typing narrows them and leads with the question.
@@ -1079,12 +1094,12 @@ fn quick_body(app: &App, p: &Palette) -> El {
             .child(text(model_name(model)).font(type_::SECTION).color(p.text_tertiary)));
     match answer {
         Some(m) if !m.text.is_empty() => {
-            sheet = sheet.child(rune_kit::markdown::Markdown::new(m.text.clone()).streaming(chat.streaming).render(&crate::ui::markdown_style(p)));
+            sheet = sheet.child(rune_kit::markdown::Markdown::new(m.text.clone()).streaming(chat.streaming()).render(&crate::ui::markdown_style(p)));
         }
         _ if chat.error.is_none() => sheet = sheet.child(thinking(p)),
         _ => {}
     }
-    if let (true, Some(status)) = (chat.streaming, &chat.status) {
+    if let (true, Some(status)) = (chat.streaming(), &chat.status) {
         sheet = sheet.child(text(status.clone()).font(type_::SECTION).color(p.text_secondary));
     }
     if let Some(line) = carrying_row(app, p) {
@@ -1105,7 +1120,7 @@ pub fn body(app: &App, p: &Palette) -> El {
     let mut thread = col().w_full().px(space::XXL).pt(space::LG).gap(space::XXL - 2.0);
     let last = chat.messages.len().saturating_sub(1);
     for (i, message) in chat.messages.iter().enumerate() {
-        let live = i == last && chat.streaming;
+        let live = i == last && chat.streaming();
         let turn = match message.role {
             Role::User => row().w_full().child(spacer())
                 .child(col().max_w(540.0).px(space::XL + 2.0).py(space::MD).radius(radius::CODE_BLOCK + 2.0)
@@ -1141,7 +1156,7 @@ pub fn body(app: &App, p: &Palette) -> El {
         };
         thread = thread.child(turn);
     }
-    if let (true, Some(status)) = (chat.streaming, &chat.status) {
+    if let (true, Some(status)) = (chat.streaming(), &chat.status) {
         thread = thread.child(text(status.clone()).font(type_::SECTION).color(p.text_secondary).ml(22.0 + space::LG));
     }
     if let Some(error) = &chat.error {
