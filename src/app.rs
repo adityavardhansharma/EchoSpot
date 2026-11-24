@@ -726,7 +726,6 @@ impl App {
             Act::Pop => self.pop(tx),
             Act::Close => self.hide(tx),
             Act::System(action) => {
-                let cmd = system::command(action);
                 self.usage.record(&format!("sys:{:?}", action));
                 if system::closes_first(action) {
                     self.hide(tx);
@@ -736,7 +735,6 @@ impl App {
                     if let Some(message) = out.message {
                         self.toast(message, if out.ok { Tone::Success } else { Tone::Neutral });
                     }
-                    let _ = cmd;
                     self.read_status();
                 }
             }

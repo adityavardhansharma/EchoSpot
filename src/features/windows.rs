@@ -85,14 +85,14 @@ pub fn active() -> Option<Client> {
     (!client.address.is_empty() && client.class != crate::APP_ID).then_some(client)
 }
 
-/// Runs a dispatcher. Hyprland with a Lua config (Omarchy's) reads `hyprctl dispatch` as Lua, so
-/// `lua` is tried first; one still on hyprlang rejects that and takes the `legacy` words.
 /// The class of the window that has the keyboard, the palette's own included.
 pub fn active_class() -> Option<String> {
     let json = output("hyprctl", &["activewindow", "-j"])?;
     serde_json::from_str::<Client>(&json).ok().map(|c| c.class)
 }
 
+/// Runs a dispatcher. Hyprland with a Lua config (Omarchy's) reads `hyprctl dispatch` as Lua, so
+/// `lua` is tried first; one still on hyprlang rejects that and takes the `legacy` words.
 pub fn dispatch(lua: &str, legacy: &[&str]) -> bool {
     if output("hyprctl", &["dispatch", lua]).is_some() {
         return true;
