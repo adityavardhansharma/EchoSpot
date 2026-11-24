@@ -141,6 +141,9 @@ pub struct SettingsUi {
     packs: crate::packs::host::Snapshot,
     /// The destructive button pressed once, waiting for the press that confirms it.
     armed: Option<String>,
+    /// The chord that summons EchoSpot, as Hyprland's config has it, and the file it is in.
+    summon: String,
+    summon_file: Option<std::path::PathBuf>,
 }
 
 /// The one thing a row of the Commands table can be in the middle of. An alias and a recording
@@ -154,6 +157,8 @@ enum Editing {
     /// This row's hotkey is being recorded: the modifiers held so far, and why the last chord
     /// pressed was not taken.
     Recording { id: String, held: Mods, error: String },
+    /// The shortcut that summons EchoSpot is being recorded, in General.
+    Summon { held: Mods, error: String },
 }
 
 impl Editing {
@@ -162,6 +167,10 @@ impl Editing {
     }
     fn recording(&self) -> Option<&str> {
         match self { Editing::Recording { id, .. } => Some(id), _ => None }
+    }
+    /// Whether keys go to a recorder: a row's hotkey or the summon shortcut.
+    fn listening(&self) -> bool {
+        matches!(self, Editing::Recording { .. } | Editing::Summon { .. })
     }
 }
 
@@ -184,6 +193,7 @@ impl SettingsUi {
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
             selected: None, reveal: None, alias: TextEdit::new(""), editing: Editing::None, packs: Default::default(), armed: None,
+            summon: String::new(), summon_file: None,
         };
         ui.reload();
         ui
@@ -212,6 +222,8 @@ impl SettingsUi {
         self.stop_recording();
         self.end_alias(false);
         self.bindings = Bindings::load();
+        self.summon = crate::features::summon::current();
+        self.summon_file = crate::features::summon::config_file();
         self.filter.replace_text("");
         self.assigned_only = false;
         self.selected = None;
@@ -522,9 +534,66 @@ impl SettingsUi {
 
     /// Stops listening without a change, and has the palette take its hotkeys back.
     fn stop_recording(&mut self) {
-        if self.editing.recording().is_some() {
-            self.editing = Editing::None;
-            tell_main(|app| app.bindings.apply());
+        match self.editing {
+            Editing::Recording { .. } => {}
+            Editing::Summon { .. } => crate::features::summon::restore(),
+            _ => return,
+        }
+        self.editing = Editing::None;
+        tell_main(|app| app.bindings.apply());
+    }
+
+    /// Starts listening for a new summon shortcut. The old one is let go of meanwhile, so
+    /// pressing it reaches this window instead of hiding it behind the palette.
+    fn begin_summon(&mut self, tx: &mut Tx) {
+        if matches!(self.editing, Editing::Summon { .. }) {
+            return;
+        }
+        let rows_held = self.editing.recording().is_some();
+        self.end_alias(false);
+        self.editing = Editing::Summon { held: Mods::default(), error: String::new() };
+        self.armed = None;
+        tx.blur();
+        crate::features::summon::release(&self.summon);
+        if !rows_held {
+            tell_main(|app| app.bindings.suspend());
+        }
+    }
+
+    /// A key while the summon shortcut is recorded. Escape keeps the old one, Backspace puts
+    /// back Omarchy's own, and anything else is the shortcut if Hyprland can bind it and no
+    /// command's hotkey has it.
+    fn summon_key(&mut self, ev: &KeyEvent, base: Option<char>) {
+        if let Key::Modifier { .. } = ev.key {
+            if let Editing::Summon { held, .. } = &mut self.editing {
+                *held = ev.mods;
+            }
+            return;
+        }
+        let m = ev.mods;
+        let bare = !(m.logo || m.ctrl || m.cmd || m.alt || m.shift);
+        let chord = match ev.key {
+            Key::Escape if bare => return self.stop_recording(),
+            Key::Backspace | Key::Delete if bare => crate::features::summon::DEFAULT.to_string(),
+            _ => match bindings::chord_of(ev, base) {
+                Some(chord) => chord,
+                None => return,
+            },
+        };
+        let refused = if bindings::hypr_chord(&chord).is_none() {
+            Some("Add Super, Ctrl or Alt".to_string())
+        } else if let Some(other) = self.bindings.holder(&chord, "") {
+            Some(format!("Used by {}", self.title_of(other)))
+        } else {
+            crate::features::summon::set(&chord).err()
+        };
+        match refused {
+            Some(why) => if let Editing::Summon { error, .. } = &mut self.editing { *error = why },
+            None => {
+                self.summon = crate::features::summon::current();
+                self.editing = Editing::None;
+                tell_main(|app| app.bindings.apply());
+            }
         }
     }
 
@@ -556,6 +625,8 @@ impl SettingsUi {
                 let Some(chord) = bindings::chord_of(ev, base) else { return };
                 let refused = if bindings::hypr_chord(&chord).is_none() {
                     Some("Add Super, Ctrl or Alt".to_string())
+                } else if bindings::hypr_chord(&chord) == bindings::hypr_chord(&self.summon) {
+                    Some("Summons EchoSpot".to_string())
                 } else {
                     self.bindings.holder(&chord, &id).map(|other| format!("Used by {}", self.title_of(other)))
                 };
@@ -929,9 +1000,37 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
             else if crate::features::expander::permitted() { "Reads the keyboard directly, as a US layout, and keeps only the last few characters in memory.".to_string() }
             else { "EchoSpot cannot read the keyboard. Add yourself to the input group (sudo usermod -aG input $USER) and log in again.".to_string() }),
         noted(p, "Shortcut", card(p, vec![
-            setting(p, "Summon EchoSpot", "", ui::keycaps_row(p, "super+space", true)),
-        ]), "Bound in ~/.config/hypr/bindings.lua to `echospot toggle`."),
+            setting(p, "Summon EchoSpot", "Click the shortcut, then press the new one.", summon_cell(ui, p)),
+        ]), match (&ui.editing, &ui.summon_file) {
+            (Editing::Summon { .. }, _) => "Press the keys to use, with Super, Ctrl or Alt among them. ⌫ puts back Super Space; esc keeps the old one.".to_string(),
+            (_, Some(file)) => format!("Bound in {} to `echospot toggle`, so it works even while EchoSpot isn't running.", crate::util::tilde(file)),
+            (_, None) => "No Hyprland config was found to bind it in.".to_string(),
+        }),
     ]
+}
+
+/// The summon shortcut, as keycaps to click, or the recorder listening for a new one.
+fn summon_cell(ui: &SettingsUi, p: &Palette) -> El {
+    if let Editing::Summon { held: m, error } = &ui.editing {
+        let held: Vec<&str> = [(m.logo, "super"), (m.ctrl || m.cmd, "ctrl"), (m.alt, "alt"), (m.shift, "shift")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect();
+        let failed = !error.is_empty();
+        let inside = if failed {
+            text(error.clone()).font(CONTROL).color(p.destructive).truncate().grow(1.0)
+        } else if held.is_empty() {
+            text("Press a shortcut…").font(CONTROL).color(p.text_secondary).grow(1.0)
+        } else {
+            row().grow(1.0).gap(space::XS).center_y().child(ui::keycaps_row(p, &held.join("+"), true))
+                .child(text("…").font(CONTROL).color(p.text_tertiary))
+        };
+        return row().key("summon-recorder").w(HOTKEY_W).h(CONTROL_H).px(space::MD).center_y().radius(radius::BAR_CONTROL)
+            .fill(if p.dark { Color::BLACK.alpha(0.22) } else { Color::BLACK.alpha(0.035) })
+            .border(2.0, if failed { p.destructive.alpha(0.85) } else { accent(p).alpha(0.85) }).motion(motion::HOVER)
+            .child(inside);
+    }
+    row().key("summon").h(CONTROL_H).px(space::XS).center_y().radius(radius::BAR_CONTROL)
+        .fill(Color::TRANSPARENT).hover(p.control_surface).press(p.control_hover).motion(motion::HOVER)
+        .on_press_tx(|ui: &mut SettingsUi, tx| ui.begin_summon(tx))
+        .child(ui::keycaps_row(p, &ui.summon, true))
 }
 
 /// The two scopes of the Commands table, as a segmented capsule.
@@ -1575,8 +1674,12 @@ fn close(ui: &mut SettingsUi, tx: &mut Tx) {
 
 pub fn on_key(ui: &mut SettingsUi, ev: &KeyEvent, tx: &mut Tx) -> bool {
     // A hotkey being recorded takes every key, the window's own shortcuts included.
-    if ui.editing.recording().is_some() {
-        ui.record_key(ev, tx.key_base());
+    if ui.editing.listening() {
+        if matches!(ui.editing, Editing::Summon { .. }) {
+            ui.summon_key(ev, tx.key_base());
+        } else {
+            ui.record_key(ev, tx.key_base());
+        }
         return true;
     }
     let table = ui.pane == Pane::Commands && !ui.alias_editing();
