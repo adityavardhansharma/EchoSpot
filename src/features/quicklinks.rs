@@ -159,7 +159,7 @@ pub fn perform(app: &mut App, op: QuicklinkOp, tx: &mut Tx) {
 pub fn save(app: &mut App, id: Option<String>, tx: &mut Tx) {
     let Some(form) = &app.form else { return };
     let link = Quicklink {
-        id: id.clone().unwrap_or_else(|| format!("{:x}", util::now_secs() * 1000 + app.quicklinks.list.len() as u64)),
+        id: id.clone().unwrap_or_else(|| util::new_id(|n| app.quicklinks.list.iter().any(|l| l.id == n))),
         name: form.get("name").trim().to_string(),
         link: form.get("link").trim().to_string(),
         alias: form.get("alias").trim().to_string(),

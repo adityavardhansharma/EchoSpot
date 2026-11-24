@@ -47,10 +47,6 @@ impl Library {
     }
 }
 
-fn new_id(n: usize) -> String {
-    format!("{:x}", util::now_secs() * 1000 + n as u64)
-}
-
 pub fn action_form(app: &App, id: Option<&str>) -> Form {
     let a = id.and_then(|id| app.ai_library.actions.iter().find(|a| a.id == id)).cloned().unwrap_or_default();
     Form::new(if id.is_some() { "Edit AI Action" } else { "Create AI Action" }, "Save Action", vec![
@@ -83,7 +79,7 @@ pub fn open_preset(app: &mut App, id: Option<String>, tx: &mut Tx) {
 
 pub fn save_action(app: &mut App, id: Option<String>, tx: &mut Tx) {
     let Some(form) = &app.form else { return };
-    let action = CustomAction { id: id.clone().unwrap_or_else(|| new_id(app.ai_library.actions.len())), title: form.get("title").trim().to_string(), prompt: form.get("prompt").trim().to_string() };
+    let action = CustomAction { id: id.clone().unwrap_or_else(|| util::new_id(|n| app.ai_library.actions.iter().any(|a| a.id == n))), title: form.get("title").trim().to_string(), prompt: form.get("prompt").trim().to_string() };
     match app.ai_library.actions.iter_mut().find(|a| Some(&a.id) == id.as_ref()) {
         Some(existing) => *existing = action,
         None => app.ai_library.actions.push(action),
@@ -96,7 +92,7 @@ pub fn save_action(app: &mut App, id: Option<String>, tx: &mut Tx) {
 pub fn save_preset(app: &mut App, id: Option<String>, tx: &mut Tx) {
     let Some(form) = &app.form else { return };
     let preset = Preset {
-        id: id.clone().unwrap_or_else(|| new_id(app.ai_library.presets.len())), name: form.get("name").trim().to_string(),
+        id: id.clone().unwrap_or_else(|| util::new_id(|n| app.ai_library.presets.iter().any(|p| p.id == n))), name: form.get("name").trim().to_string(),
         instructions: form.get("instructions").trim().to_string(), model: form.get("model").trim().to_string(),
     };
     match app.ai_library.presets.iter_mut().find(|p| Some(&p.id) == id.as_ref()) {

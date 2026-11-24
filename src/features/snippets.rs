@@ -140,7 +140,7 @@ pub fn perform(app: &mut App, op: SnippetOp, tx: &mut Tx) {
 pub fn save(app: &mut App, id: Option<String>, tx: &mut Tx) {
     let Some(form) = &app.form else { return };
     let snippet = Snippet {
-        id: id.clone().unwrap_or_else(|| format!("{:x}", util::now_secs() * 1000 + app.snippets.list.len() as u64)),
+        id: id.clone().unwrap_or_else(|| util::new_id(|n| app.snippets.list.iter().any(|s| s.id == n))),
         name: form.get("name").trim().to_string(),
         text: form.get("text"),
         keyword: form.get("keyword").trim().to_string(),

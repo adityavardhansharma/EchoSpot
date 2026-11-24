@@ -144,6 +144,18 @@ pub fn write_file(path: &std::path::Path, bytes: &[u8], mode: u32) -> bool {
     std::fs::rename(&tmp, path).is_ok()
 }
 
+/// A fresh id for a saved item: the current millisecond in hex, moved on past any `taken` one.
+pub fn new_id(taken: impl Fn(&str) -> bool) -> String {
+    let mut n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    loop {
+        let id = format!("{n:x}");
+        if !taken(&id) {
+            return id;
+        }
+        n += 1;
+    }
+}
+
 pub fn now_secs() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
