@@ -762,8 +762,18 @@ impl App {
                 self.refresh_keeping();
             }
             Act::Hide(id) => {
-                self.usage.hidden.push(id);
+                if !self.usage.hidden.contains(&id) {
+                    self.usage.hidden.push(id);
+                    self.usage.save();
+                }
+                self.toast("Hidden from Results", Tone::Success);
+                self.refresh_keeping();
+            }
+            Act::UnhideAll => {
+                let n = self.usage.hidden.len();
+                self.usage.hidden.clear();
                 self.usage.save();
+                self.toast(format!("{n} Shown Again"), Tone::Success);
                 self.refresh_keeping();
             }
             Act::Emoji(emoji, op) => features::emoji::perform(self, &emoji, op, tx),

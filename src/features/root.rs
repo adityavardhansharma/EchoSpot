@@ -97,6 +97,15 @@ fn entries(app: &App) -> Vec<Entry> {
             keywords: "backup restore export import settings data migrate".into(),
         });
     }
+    // Hiding a row is undone here: nothing else lists what was hidden.
+    if !app.usage.hidden.is_empty() {
+        let n = app.usage.hidden.len();
+        out.push(Entry {
+            item: Item::new("cmd:unhide", format!("Show {n} Hidden Application{}", if n == 1 { "" } else { "s" }), IconSrc::Badge(&icons::EYE, Tint::Graphite)).trailing("Command")
+                .action(Action::new("Show Them Again", &icons::EYE, Act::UnhideAll)),
+            keywords: "unhide hidden applications restore show".into(),
+        });
+    }
     out.push(Entry {
         item: Item::new("cmd:settings", "EchoSpot Settings", IconSrc::Badge(&icons::GEAR, Tint::Graphite)).trailing("Command")
             .action(Action::new("Open Settings", &icons::GEAR, Act::OpenSettings(String::new()))),

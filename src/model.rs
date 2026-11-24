@@ -93,6 +93,8 @@ pub enum Act {
     Clip(ClipOp, u64),
     Favorite(String),
     Hide(String),
+    /// Bring every row hidden from the results back.
+    UnhideAll,
     Emoji(String, EmojiOp),
     Snippet(SnippetOp),
     File(FileOp),
