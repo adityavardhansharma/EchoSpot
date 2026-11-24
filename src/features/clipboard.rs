@@ -107,6 +107,10 @@ pub fn store_from_stdin(image: bool) {
     if matches!(std::env::var("CLIPBOARD_STATE").as_deref(), Ok("sensitive") | Ok("clear") | Ok("nil")) {
         return;
     }
+    // History switched off while a watcher was still running: nothing is kept.
+    if !crate::settings::Settings::load().clipboard_history {
+        return;
+    }
     let mut bytes = Vec::new();
     if std::io::stdin().take(64 * 1024 * 1024).read_to_end(&mut bytes).is_err() || bytes.is_empty() {
         return;
@@ -151,9 +155,35 @@ pub fn store_from_stdin(image: bool) {
     });
 }
 
-/// Starts the two watchers, once per session; they live as long as the palette's process.
+/// The two `wl-paste --watch` processes while history is kept; empty while it is off.
+fn watchers() -> &'static std::sync::Mutex<Vec<std::process::Child>> {
+    static WATCHERS: std::sync::OnceLock<std::sync::Mutex<Vec<std::process::Child>>> = std::sync::OnceLock::new();
+    WATCHERS.get_or_init(Default::default)
+}
+
+/// Keeps a history or stops keeping one, from this moment: the Settings switch.
+pub fn set_history(on: bool) {
+    if on { start_watchers() } else { stop_watchers() }
+}
+
+/// Stops the watchers; nothing more is filed until they start again.
+pub fn stop_watchers() {
+    let Ok(mut running) = watchers().lock() else { return };
+    for mut child in running.drain(..) {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+}
+
+/// Starts the two watchers unless they are running; they live as long as the palette's process.
 pub fn start_watchers() {
     if !util::has_program("wl-paste") {
+        return;
+    }
+    let Ok(mut running) = watchers().lock() else { return };
+    // One that exited on its own (the compositor restarted) is started again.
+    running.retain_mut(|c| matches!(c.try_wait(), Ok(None)));
+    if !running.is_empty() {
         return;
     }
     let Ok(exe) = std::env::current_exe() else { return };
@@ -174,7 +204,9 @@ pub fn start_watchers() {
                 Ok(())
             });
         }
-        let _ = cmd.spawn();
+        if let Ok(child) = cmd.spawn() {
+            running.push(child);
+        }
     }
 }
 

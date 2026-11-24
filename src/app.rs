@@ -313,6 +313,7 @@ impl App {
         self.usage = Usage::load();
         self.ext.rescan();
         features::expander::set_enabled(self.settings.snippet_expansion);
+        features::clipboard::set_history(self.settings.clipboard_history);
         self.schedule.read_at = 0;
         features::calendar::refresh(self, true);
         self.refresh();

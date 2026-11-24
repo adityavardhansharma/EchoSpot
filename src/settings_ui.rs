@@ -306,6 +306,9 @@ impl SettingsUi {
             let settings = self.settings.clone();
             main.update(move |app: &mut App, _| {
                 crate::features::expander::set_enabled(settings.snippet_expansion);
+                if settings.clipboard_history != app.settings.clipboard_history {
+                    crate::features::clipboard::set_history(settings.clipboard_history);
+                }
                 app.settings = settings;
                 app.refresh();
             });
@@ -1240,7 +1243,7 @@ fn clipboard(ui: &SettingsUi, p: &Palette) -> Vec<El> {
                     ui.clipboard = (0, 0, 0);
                     tell_main(|app| app.clipboard.reload());
                 })),
-        ]), "Entries a password manager marks sensitive are never kept. Turning history on or off takes effect the next time EchoSpot starts."),
+        ]), "Entries a password manager marks sensitive are never kept. Turned off, nothing more is kept; what is already here stays until it is cleared."),
         noted(p, "In the Palette", card(p, vec![
             setting(p, "Paste the selected entry", "Goes straight into the app you came from.", ui::keycaps_row(p, "enter", true)),
             setting(p, "Pin an entry", "Pinned entries stay at the top and are never pruned.", ui::keycaps_row(p, "ctrl+shift+p", true)),
