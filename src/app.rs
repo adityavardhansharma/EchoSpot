@@ -88,13 +88,30 @@ pub struct Page {
     pub actions: Vec<Action>,
 }
 
+/// Who a confirm dialog answers. One dialog shows at a time, and whoever asked always hears back:
+/// a dialog put away unanswered (the palette hidden, another dialog taking its place) is a no.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Asker {
+    /// A row's own action, run on a yes.
+    Palette,
+    /// A Raycast extension's `confirmAlert`: its session and the call waiting on the answer.
+    Ext { session: u64, call: u64 },
+    /// A pack's final ability, waiting under this token.
+    Pack(u64),
+}
+
+pub struct Dialog {
+    pub confirm: Confirm,
+    pub asker: Asker,
+    /// Which button is lit: 0 cancel, 1 confirm.
+    pub sel: usize,
+}
+
 pub struct App {
     pub me: Option<AppHandle<App>>,
     pub screens: Vec<Screen>,
     pub menu: Option<Menu>,
-    pub dialog: Option<Confirm>,
-    /// Which dialog button is lit: 0 cancel, 1 confirm.
-    pub dialog_sel: usize,
+    pub dialog: Option<Dialog>,
     pub toast: Option<Toast>,
     pub apps: Vec<AppEntry>,
     pub usage: Usage,
@@ -135,8 +152,6 @@ pub struct App {
     pub status: system::Status,
     /// When the selection last moved by key, to tell a held key from a press.
     last_step: f64,
-    /// The extension call a confirm dialog answers: session and call id.
-    pub dialog_reply: Option<(u64, u64)>,
     /// Packs: their runtime, and what their screens last drew.
     pub packs: crate::packs::host::Host,
 }
@@ -148,7 +163,6 @@ impl App {
             screens: vec![Screen::new(Route::Root)],
             menu: None,
             dialog: None,
-            dialog_sel: 1,
             toast: None,
             apps: features::apps::scan(),
             usage: Usage::load(),
@@ -182,7 +196,6 @@ impl App {
             was_focused: false,
             status: system::Status::default(),
             last_step: f64::NEG_INFINITY,
-            dialog_reply: None,
             packs: crate::packs::host::Host::new(),
         };
         app.refresh();
@@ -350,11 +363,8 @@ impl App {
         self.screens.truncate(1);
         self.packs.drawn.borrow_mut().clear();
         self.packs.sending = None;
-        if let Some(token) = self.packs.confirm.take() {
-            self.packs.rt.answer_confirm(token, false, false);
-        }
+        self.decline_dialog();
         self.menu = None;
-        self.dialog = None;
         self.form = None;
         self.page = None;
         let root = self.top_mut();
@@ -756,12 +766,7 @@ impl App {
             Act::File(op) => features::files::perform(self, op, tx),
             Act::Snap(op) => features::snap::perform(self, op, tx),
             Act::Quicklink(op) => features::quicklinks::perform(self, op, tx),
-            Act::Confirm(confirm) => {
-                self.menu = None;
-                // Return confirms, except where it can't be undone: there it lands on Cancel.
-                self.dialog_sel = if confirm.destructive { 0 } else { 1 };
-                self.dialog = Some(*confirm);
-            }
+            Act::Confirm(confirm) => self.ask(*confirm, Asker::Palette),
             Act::Ext(act) => crate::ext::perform(self, act, tx),
             Act::Ai(op) => features::ai::perform(self, op, tx),
             Act::Backup(op) => features::backup::perform(self, op, tx),
@@ -832,29 +837,56 @@ impl App {
         tx.scroll_to_instant("list", 0.0, 0.0);
     }
 
-    /// Closes the dialog with its answer: runs its action, or replies to the extension that asked.
+    /// Puts up a confirm dialog for whoever asked. Return confirms, except where it can't be
+    /// undone: there it lands on Cancel. A dialog already up is answered no first, so the one
+    /// that asked it is not left waiting.
+    pub fn ask(&mut self, confirm: Confirm, asker: Asker) {
+        self.decline_dialog();
+        self.menu = None;
+        let sel = if confirm.destructive { 0 } else { 1 };
+        self.dialog = Some(Dialog { confirm, asker, sel });
+    }
+
+    /// Puts the dialog away unanswered: whoever asked hears no.
+    pub fn decline_dialog(&mut self) {
+        let Some(dialog) = self.dialog.take() else { return };
+        self.reply(dialog.asker, false);
+    }
+
+    fn reply(&mut self, asker: Asker, confirmed: bool) {
+        match asker {
+            Asker::Palette => {}
+            Asker::Ext { session, call } => crate::ext::reply_confirm(self, session, call, confirmed),
+            Asker::Pack(token) => {
+                self.packs.rt.answer_confirm(token, confirmed, false);
+                if !confirmed {
+                    self.toast = None;
+                }
+            }
+        }
+    }
+
+    /// Closes the dialog with its answer: runs its action, or replies to whoever asked.
     pub fn answer_dialog(&mut self, confirmed: bool, tx: &mut Tx) {
         let Some(dialog) = self.dialog.take() else { return };
-        if let Some(token) = self.packs.confirm.take() {
-            // A final ability asked first: this is the person's answer.
-            self.packs.rt.answer_confirm(token, confirmed, false);
-            if !confirmed {
-                self.toast = None;
-            }
-            return;
-        }
-        if self.dialog_reply.is_some() {
-            crate::ext::reply_confirm(self, confirmed);
-        } else if confirmed {
-            self.perform(dialog.act, tx);
+        match dialog.asker {
+            Asker::Palette if confirmed => self.perform(dialog.confirm.act, tx),
+            asker => self.reply(asker, confirmed),
         }
     }
 
     fn dialog_key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
         match ev.key {
             Key::Escape => self.answer_dialog(false, tx),
-            Key::Left | Key::Right | Key::Tab => self.dialog_sel = 1 - self.dialog_sel,
-            Key::Enter => self.answer_dialog(self.dialog_sel == 1, tx),
+            Key::Left | Key::Right | Key::Tab => {
+                if let Some(d) = &mut self.dialog {
+                    d.sel = 1 - d.sel;
+                }
+            }
+            Key::Enter => {
+                let yes = self.dialog.as_ref().is_some_and(|d| d.sel == 1);
+                self.answer_dialog(yes, tx);
+            }
             _ => {}
         }
         true

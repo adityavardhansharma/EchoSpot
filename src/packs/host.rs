@@ -90,8 +90,6 @@ pub struct Host {
     /// The value Send to… is offering around.
     pub sending: Option<(Value, Type)>,
     waiting: HashMap<u64, Waiting>,
-    /// The final call the dialog is asking about.
-    pub confirm: Option<u64>,
     /// An effect that can still be taken back with a key, and until when.
     pub undo: Option<(u64, f64)>,
     icons: RefCell<HashMap<String, IconSrc>>,
@@ -136,7 +134,7 @@ impl Host {
         let mut rt = Runtime::new();
         rt.confirm_finals = true;
         Self {
-            rt, inputs: HashMap::new(), living: HashMap::new(), drawn: RefCell::default(), answers: Vec::new(), sending: None, waiting: HashMap::new(), confirm: None, undo: None,
+            rt, inputs: HashMap::new(), living: HashMap::new(), drawn: RefCell::default(), answers: Vec::new(), sending: None, waiting: HashMap::new(), undo: None,
             icons: RefCell::default(), fx_rows: RefCell::default(), errors: HashMap::new(), stamp: 0, shown: util::read_json(&shown_path()), drew: HashMap::new(),
             headless: false, scene_size: None, last_tick: 0.0, seen: Seen::default(),
         }
@@ -1418,13 +1416,10 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
             }
             Event::PacksChanged => reloaded = true,
             Event::Confirm { token, title, summary, .. } => {
-                app.menu = None;
-                app.packs.confirm = Some(token);
-                app.dialog_sel = 0;
-                app.dialog = Some(Confirm {
+                app.ask(Confirm {
                     title: format!("{title}?"), message: if summary.is_empty() { "This can't be undone.".into() } else { format!("{summary}\nThis can't be undone.") },
                     icon: &icons::BOLT, confirm: "Do It".into(), destructive: true, act: Act::None,
-                });
+                }, crate::app::Asker::Pack(token));
             }
             Event::Pick { token, title, folder, .. } => {
                 let label = if folder { "Folder" } else { "File" };

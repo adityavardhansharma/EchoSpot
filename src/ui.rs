@@ -609,10 +609,11 @@ fn menu_view(s: &App, p: &Palette, menu: &Menu) -> El {
     el().pin(FULL, FULL, FULL, FULL).child(catcher).child(panel)
 }
 
-fn dialog_view(s: &App, p: &Palette, d: &Confirm) -> El {
+fn dialog_view(p: &Palette, dialog: &crate::app::Dialog) -> El {
+    let d = &dialog.confirm;
     // The two answers are the palette's pills: the lit one is what Return does.
     let button = |label: &str, index: usize, primary: bool| {
-        let lit = s.dialog_sel == index;
+        let lit = dialog.sel == index;
         let tint = if d.destructive { p.destructive } else { p.primary_action };
         let base = row().key(format!("dialog-{index}")).grow(1.0).w(0.0).h(size::DIALOG_BUTTON_H).center().radius(size::DIALOG_BUTTON_H / 2.0);
         let base = if primary { base.fill(tint.alpha(if lit { 0.92 } else { 0.22 })).hover(tint.alpha(0.80)).press(tint) }
@@ -715,7 +716,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         panel = panel.child(menu_view(s, &p, menu));
     }
     if let Some(dialog) = &s.dialog {
-        panel = panel.child(dialog_view(s, &p, dialog));
+        panel = panel.child(dialog_view(&p, dialog));
     }
     if !liquid {
         panel = panel.child(panel_rim(&p));

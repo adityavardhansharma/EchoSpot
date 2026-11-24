@@ -914,13 +914,11 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                     }
                     "confirm" => {
                         let c = args.first().cloned().unwrap_or(Value::Null);
-                        app.dialog_sel = 1;
-                        app.dialog = Some(Confirm {
+                        app.ask(Confirm {
                             title: text_of(c.get("title")), message: text_of(c.get("message")), icon: &icons::INFO,
                             confirm: text_of(c.get("confirm")), destructive: c.get("destructive").and_then(Value::as_bool).unwrap_or(false),
                             act: Act::None,
-                        });
-                        app.dialog_reply = Some((id, call_id));
+                        }, crate::app::Asker::Ext { session: id, call: call_id });
                     }
                     "oauth" => {
                         let o = args.first().cloned().unwrap_or(Value::Null);
@@ -1132,11 +1130,9 @@ pub fn open_link(app: &mut App, url: &str, tx: &mut Tx) -> bool {
 }
 
 /// Answers a `confirmAlert` the extension is waiting on.
-pub fn reply_confirm(app: &mut App, confirmed: bool) {
-    if let Some((session, call)) = app.dialog_reply.take() {
-        if let Some(s) = app.ext.session_mut(session) {
-            s.send(json!({ "t": "reply", "id": call, "ok": true, "value": confirmed }));
-        }
+pub fn reply_confirm(app: &mut App, session: u64, call: u64, confirmed: bool) {
+    if let Some(s) = app.ext.session_mut(session) {
+        s.send(json!({ "t": "reply", "id": call, "ok": true, "value": confirmed }));
     }
 }
 
