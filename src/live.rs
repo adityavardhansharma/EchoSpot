@@ -441,7 +441,10 @@ fn grab<'a>(
         conn.flush()?;
         queue.blocking_dispatch(state)?;
     }
-    let Some((format, w, h, stride)) = state.grab.offer.filter(|_| !state.grab.failed) else { return Ok(None) };
+    let Some((format, w, h, stride)) = state.grab.offer.filter(|_| !state.grab.failed) else {
+        f.destroy();
+        return Ok(None);
+    };
     let key = (format as u32, w, h, stride);
     if buffers.get(&c.address).is_none_or(|b| b.key != key) {
         let len = (stride * h) as usize;
@@ -456,10 +459,15 @@ fn grab<'a>(
     let b = &buffers[&c.address];
     f.copy(&b.buffer, 1);
     while !(state.grab.ready || state.grab.failed) {
-        if Instant::now() > deadline { return Ok(None); }
+        if Instant::now() > deadline {
+            f.destroy();
+            return Ok(None);
+        }
         conn.flush()?;
         queue.blocking_dispatch(state)?;
     }
+    // Each capture is its own frame object: the compositor holds it until it is destroyed.
+    f.destroy();
     if state.grab.failed { return Ok(None); }
     let px = unsafe { std::slice::from_raw_parts(b.map as *const u8, b.len) };
     Ok(Some((px, (format, w, h, stride), stride, state.grab.inverted)))
