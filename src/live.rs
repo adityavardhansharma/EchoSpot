@@ -368,6 +368,10 @@ fn run(window: (f32, f32), deliver: &dyn Fn(u32, u32, Vec<u8>), live: &Live) -> 
             if let Some(p) = wallpaper_path() && let Some(rgba) = load_wallpaper(&p, mw, mh) {
                 wall = Some(Wallpaper { path: p, size: (mw, mh), rgba, checked: Instant::now() });
             }
+            // One of another monitor's size can't be laid on this one: it would be read past its end.
+            if wall.as_ref().is_some_and(|w| w.size != (mw, mh)) {
+                wall = None;
+            }
         } else if let Some(w) = &mut wall && w.checked.elapsed() > Duration::from_secs(2) {
             w.checked = Instant::now();
         }
