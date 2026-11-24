@@ -144,6 +144,8 @@ pub struct SettingsUi {
     record_error: String,
     /// The packs as the palette's runtime last described them (API-DESIGN.md §9.1, §12, §15, §23).
     packs: crate::packs::host::Snapshot,
+    /// The destructive button pressed once, waiting for the press that confirms it.
+    armed: Option<String>,
 }
 
 fn row_key(id: &str) -> String {
@@ -165,7 +167,7 @@ impl SettingsUi {
             probe: Probe::Idle, icons: Default::default(), backdrop: rune::Pixels::new(), has_backdrop: false, glass: Default::default(), system_dark: std::cell::Cell::new(true),
             commands: Vec::new(), shown: Vec::new(), bindings: Bindings::default(), filter: TextEdit::new(""), assigned_only: false,
             selected: None, reveal: None, alias: TextEdit::new(""), alias_for: None, alias_before: String::new(),
-            recording: None, held: Mods::default(), record_error: String::new(), packs: Default::default(),
+            recording: None, held: Mods::default(), record_error: String::new(), packs: Default::default(), armed: None,
         };
         ui.reload();
         ui
@@ -197,6 +199,7 @@ impl SettingsUi {
         self.filter.replace_text("");
         self.assigned_only = false;
         self.selected = None;
+        self.armed = None;
         self.refilter();
     }
 
@@ -237,6 +240,7 @@ impl SettingsUi {
     fn show(&mut self, pane: Pane) {
         self.stop_recording();
         self.end_alias(false);
+        self.armed = None;
         self.pane = pane;
         // The search has the keyboard, as it does in the palette, unless a row was asked for.
         self.filter.focused = pane == Pane::Commands && self.reveal.is_none();
@@ -293,6 +297,7 @@ impl SettingsUi {
 
     /// Saves and hands the palette the new settings.
     fn commit(&mut self) {
+        self.armed = None;
         let ai = &mut self.settings.ai;
         ai.model = self.model.text.trim().to_string();
         ai.base_url = self.base_url.text.trim().to_string();
@@ -676,6 +681,24 @@ fn button(p: &Palette, key: &str, label: &str, destructive: bool, press: impl Fn
     row().key(key.to_string()).h(CONTROL_H).px(space::XL).center().radius(CONTROL_H / 2.0)
         .fill(p.control_surface).hover(p.control_hover).press(p.control_pressed).motion(motion::HOVER).on_press_tx(press)
         .child(text(label.to_string()).font(CONTROL).color(if destructive { p.destructive } else { p.text.alpha(0.92) }))
+}
+
+/// A button that throws something away. The first press only arms it, and it says so; the
+/// second does it. Changing a setting or turning to another pane in between disarms it.
+fn danger_button(ui: &SettingsUi, p: &Palette, key: &str, label: &str, press: impl Fn(&mut SettingsUi, &mut Tx) + 'static) -> El {
+    let armed = ui.armed.as_deref() == Some(key);
+    let id = key.to_string();
+    row().key(key.to_string()).h(CONTROL_H).px(space::XL).center().radius(CONTROL_H / 2.0)
+        .fill(if armed { p.destructive.alpha(0.18) } else { p.control_surface }).hover(p.control_hover).press(p.control_pressed).motion(motion::HOVER)
+        .on_press_tx(move |ui: &mut SettingsUi, tx| {
+            if ui.armed.as_deref() == Some(id.as_str()) {
+                ui.armed = None;
+                press(ui, tx);
+            } else {
+                ui.armed = Some(id.clone());
+            }
+        })
+        .child(text(if armed { "Click Again to Confirm".to_string() } else { label.to_string() }).font(CONTROL).color(p.destructive))
 }
 
 /// A button that leaves for the browser, and says so with its arrow.
@@ -1209,7 +1232,7 @@ fn ai_pane(ui: &SettingsUi, p: &Palette) -> Vec<El> {
             "Left empty, EchoSpot asks for short, direct answers."),
         group(p, "History", card(p, vec![
             setting(p, "Saved chats", &format!("{} kept on this machine. The newest 40 stay.", ui.chats),
-                button(p, "clear-chats", "Delete All…", true, |ui, _| {
+                danger_button(ui, p, "clear-chats", "Delete All…", |ui, _| {
                     let _ = std::fs::remove_dir_all(crate::util::data_dir().join("chats"));
                     ui.chats = 0;
                     tell_main(|app| app.chat.clear());
@@ -1238,7 +1261,7 @@ fn clipboard(ui: &SettingsUi, p: &Palette) -> Vec<El> {
             setting(p, "Keep clipboard history", "Text, links, colors and images you copy.",
                 switch(p, "clipboard-history", s.clipboard_history, |s| s.clipboard_history = !s.clipboard_history)),
             setting(p, "Clear history", "Removes every entry, pinned ones too.",
-                button(p, "clear-clipboard", "Clear…", true, |ui, _| {
+                danger_button(ui, p, "clear-clipboard", "Clear…", |ui, _| {
                     let _ = std::fs::remove_dir_all(crate::util::data_dir().join("clipboard"));
                     ui.clipboard = (0, 0, 0);
                     tell_main(|app| app.clipboard.reload());
@@ -1336,7 +1359,7 @@ fn extensions(ui: &SettingsUi, p: &Palette, scale: f32) -> Vec<El> {
             .child(col().grow(1.0).min_w(0.0).gap(1.0)
                 .child(text(e.title.clone()).font(type_::ROW_TITLE).color(p.text).truncate())
                 .child(text(format!("{by}{} command{}", e.commands, if e.commands == 1 { "" } else { "s" })).font(NOTE).color(p.text_secondary).truncate()))
-            .child(button(p, &format!("uninstall-{id}"), "Uninstall", true, move |ui, _| {
+            .child(danger_button(ui, p, &format!("uninstall-{id}"), "Uninstall", move |ui, _| {
                 let _ = std::fs::remove_dir_all(crate::ext::extensions_dir().join(&id));
                 ui.extensions.retain(|e| e.id != id);
                 tell_main(|app| app.ext.rescan());
@@ -1401,11 +1424,11 @@ fn packs_pane(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         }
         for ask in &pack.held {
             let (id, revoked) = (pack.id.clone(), ask.clone());
-            rows.push(setting(p, &ask.sentence(), "Granted", button(p, &format!("revoke-{}-{}-{}", pack.id, ask.kind, ask.what), "Revoke", true, move |ui, _| ui.revoke(id.clone(), Some(revoked.clone())))));
+            rows.push(setting(p, &ask.sentence(), "Granted", danger_button(ui, p, &format!("revoke-{}-{}-{}", pack.id, ask.kind, ask.what), "Revoke", move |ui, _| ui.revoke(id.clone(), Some(revoked.clone())))));
         }
         if pack.held.len() > 1 {
             let id = pack.id.clone();
-            rows.push(setting(p, "Every permission", "It stops until you review them again in EchoSpot.", button(p, &format!("revoke-all-{}", pack.id), "Revoke All", true, move |ui, _| ui.revoke(id.clone(), None))));
+            rows.push(setting(p, "Every permission", "It stops until you review them again in EchoSpot.", danger_button(ui, p, &format!("revoke-all-{}", pack.id), "Revoke All", move |ui, _| ui.revoke(id.clone(), None))));
         }
         let note = if pack.facts.is_empty() { "Nothing seen yet.".to_string() } else { pack.facts.join(" · ") };
         out.push(noted(p, &pack.name, card(p, rows), note));
@@ -1419,7 +1442,7 @@ fn packs_pane(ui: &SettingsUi, p: &Palette) -> Vec<El> {
     } else {
         snap.secrets.iter().map(|(name, hosts)| {
             let gone = name.clone();
-            setting(p, name, &format!("Sent only to {}", hosts.join(", ")), button(p, &format!("secret-{name}"), "Remove", true, move |ui, _| {
+            setting(p, name, &format!("Sent only to {}", hosts.join(", ")), danger_button(ui, p, &format!("secret-{name}"), "Remove", move |ui, _| {
                 crate::packs::secrets::remove(&gone);
                 ui.load_packs();
             }))
