@@ -398,10 +398,7 @@ pub fn themes(_app: &App, query: &str) -> Built {
         }
     }
     names.sort();
-    let pretty = |n: &str| n.split('-').map(|w| {
-        let mut c = w.chars();
-        c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
-    }).collect::<Vec<_>>().join(" ");
+    let pretty = |n: &str| n.split('-').map(util::capitalize).collect::<Vec<_>>().join(" ");
     let items: Vec<Item> = names.iter().filter(|n| q.is_empty() || fuzzy::score(q, &pretty(n)).is_some()).map(|n| {
         let title = pretty(n);
         let active = current == title.to_lowercase() || current == *n;

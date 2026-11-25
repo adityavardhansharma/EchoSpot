@@ -554,8 +554,7 @@ pub fn pack_verbs(rt: &Runtime, value: &Value, kind: &str) -> Vec<Action> {
 }
 
 fn capitalise(s: &str) -> String {
-    let mut c = s.chars();
-    c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+    crate::util::capitalize(s)
 }
 
 /// One action a pack put on a row or a block.

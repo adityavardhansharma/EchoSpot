@@ -75,10 +75,7 @@ impl EmojiStore {
 }
 
 fn title_case(name: &str) -> String {
-    name.split(' ').map(|w| {
-        let mut c = w.chars();
-        c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
-    }).collect::<Vec<_>>().join(" ")
+    name.split(' ').map(util::capitalize).collect::<Vec<_>>().join(" ")
 }
 
 fn item(app: &App, e: &Emoji, section: &str) -> Item {

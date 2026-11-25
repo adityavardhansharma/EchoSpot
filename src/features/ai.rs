@@ -109,10 +109,7 @@ pub fn model_name(id: &str) -> String {
         return id.to_string();
     }
     let (words, numbers): (Vec<&str>, Vec<&str>) = parts.partition(|p| p.chars().any(|c| c.is_alphabetic()));
-    let family = words.iter().map(|w| {
-        let mut c = w.chars();
-        c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
-    }).collect::<Vec<_>>().join(" ");
+    let family = words.iter().map(|w| util::capitalize(w)).collect::<Vec<_>>().join(" ");
     let version = numbers.iter().filter(|n| n.len() < 3).copied().collect::<Vec<_>>().join(".");
     format!("Claude {family} {version}").trim().to_string()
 }

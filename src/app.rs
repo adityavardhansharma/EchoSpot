@@ -640,9 +640,7 @@ impl App {
             .find(|a| a.wm_class.to_lowercase() == class || a.id.trim_end_matches(".desktop").to_lowercase() == class)
             .map(|a| a.name.clone())
             .unwrap_or_else(|| {
-                let short = win.class.rsplit('.').next().unwrap_or(&win.class);
-                let mut c = short.chars();
-                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+                util::capitalize(win.class.rsplit('.').next().unwrap_or(&win.class))
             });
         if name.is_empty() { "Paste".into() } else { format!("Paste to {name}") }
     }
