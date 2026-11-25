@@ -386,7 +386,8 @@ pub fn read(source: &str, force: bool) -> Result<String, String> {
     let url = source.replacen("webcal://", "https://", 1);
     match crate::ext::net::get(&url).filter(|t| t.contains("BEGIN:VCALENDAR")) {
         Some(text) => {
-            let _ = std::fs::write(&cache, &text);
+            // A private calendar's events: readable by this user only.
+            util::write_file(&cache, text.as_bytes(), 0o600);
             Ok(text)
         }
         // Offline: yesterday's copy is better than an empty day.
