@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use rune::AppHandle;
 
-use crate::app::{App, Screen};
+use crate::app::App;
 use crate::model::Route;
 
 fn socket() -> PathBuf {
@@ -54,17 +54,7 @@ fn show(handle: &AppHandle<App>, route: Option<Route>) {
         s.reset();
         s.will_show();
         if let Some(route) = route {
-            s.screens.push(Screen::new(route));
-            if s.top().route == Route::Clipboard {
-                s.clipboard.reload();
-            }
-            if s.top().route == Route::Notes {
-                s.notes = crate::features::notes::load();
-            }
-            if matches!(s.top().route, Route::Snap(_)) {
-                s.snap = crate::features::snap::Snap::load(s.prev_window.as_ref());
-            }
-            s.refresh();
+            s.enter(route);
         }
     });
     handle.open();

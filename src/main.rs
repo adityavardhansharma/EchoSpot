@@ -211,14 +211,7 @@ fn main() {
             state.read_status();
         }
         if let Some(route) = open_route.as_deref().and_then(ipc::route) {
-            if route == model::Route::Notes {
-                state.notes = features::notes::load();
-            }
-            if matches!(route, model::Route::Snap(_)) {
-                state.snap = features::snap::Snap::load(state.prev_window.as_ref());
-            }
-            state.screens.push(app::Screen::new(route));
-            state.refresh();
+            state.enter(route);
         }
         state
     });

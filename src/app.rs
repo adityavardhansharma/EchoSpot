@@ -280,6 +280,13 @@ impl App {
     }
 
     pub fn push(&mut self, route: Route, tx: &mut Tx) {
+        self.enter(route);
+        tx.instant();
+    }
+
+    /// Opens a screen on top and reads what it shows fresh: the one way in, whether from a row,
+    /// a summon with `echospot open …`, or the first launch.
+    pub fn enter(&mut self, route: Route) {
         self.menu = None;
         self.screens.push(Screen::new(route));
         if matches!(self.top().route, Route::Snap(_)) {
@@ -301,7 +308,6 @@ impl App {
             self.top_mut().filter = features::ai::model_filter(&self.settings.ai).1;
         }
         self.refresh();
-        tx.instant();
     }
 
     /// Reads everything kept on disk again: after a restore, or when another process changed it.
