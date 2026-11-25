@@ -151,6 +151,8 @@ pub struct App {
     last_step: f64,
     /// Packs: their runtime, and what their screens last drew.
     pub packs: crate::packs::host::Host,
+    /// The summon-shortcut screen's recording, while it is open.
+    pub recorder: features::summon::Recorder,
 }
 
 impl App {
@@ -192,6 +194,7 @@ impl App {
             status: system::Status::default(),
             last_step: f64::NEG_INFINITY,
             packs: crate::packs::host::Host::new(),
+            recorder: Default::default(),
         };
         app.refresh();
         app
@@ -237,6 +240,7 @@ impl App {
             Route::Notes => features::notes::build(self, &query),
             Route::Schedule => features::calendar::build(self, &query),
             Route::Themes => features::root::themes(self, &query),
+            Route::Shortcut => features::summon::build(self),
             Route::Form => Built::list(Sections::default(), ""),
             Route::Page => {
                 // One unseen row carries the page's actions to the bottom bar.
@@ -299,6 +303,9 @@ impl App {
         if self.top().route == Route::Themes {
             features::root::forget_theme();
         }
+        if self.top().route == Route::Shortcut {
+            features::summon::begin(self);
+        }
         if self.top().route == Route::Ai {
             self.top_mut().filter = features::ai::model_filter(&self.settings.ai).1;
         }
@@ -347,7 +354,11 @@ impl App {
                 }
                 self.ext.stop(id);
             }
-            let was_form = self.screens.pop().is_some_and(|s| s.route == Route::Form);
+            let popped = self.screens.pop().map(|s| s.route);
+            let was_form = popped == Some(Route::Form);
+            if popped == Some(Route::Shortcut) {
+                features::summon::end(self);
+            }
             self.packs.drawn.borrow_mut().remove(&self.screens.len());
             let left = self.form.take().map(|f| f.target);
             if let Some(features::forms::Target::Pack(form)) = &left {
@@ -366,6 +377,9 @@ impl App {
 
     /// Back to the launcher with nothing typed, as a fresh summon finds it.
     pub fn reset(&mut self) {
+        if self.screens.iter().any(|s| s.route == Route::Shortcut) {
+            features::summon::end(self);
+        }
         let running: Vec<u64> = self.screens.iter().filter_map(|s| if let Route::Ext(id) = s.route { Some(id) } else { None }).collect();
         for id in running {
             // A command waiting on a browser sign-in is still wanted when the palette returns.
@@ -579,7 +593,8 @@ impl App {
             Action::new("Manage Extensions", &icons::PUZZLE, Act::Push(Route::Extensions)),
             Action::new("Manage Packs", &icons::BOX, Act::Pack(PackOp::Manage)),
             Action::new("Reload Applications", &icons::REFRESH, Act::Toast("reload".into())),
-            Action::new("Keyboard Shortcuts", &icons::KEYBOARD, Act::OpenSettings("shortcuts".into())).section(""),
+            Action::new("Change EchoSpot Shortcut…", &icons::KEYBOARD, Act::Push(Route::Shortcut)).section(""),
+            Action::new("Keyboard Shortcuts", &icons::KEYBOARD, Act::OpenSettings("shortcuts".into())),
             Action::new("About EchoSpot", &icons::LOGO, Act::OpenSettings("about".into())),
             Action::new("Quit EchoSpot", &icons::POWER, Act::Quit).keys("ctrl+q"),
         ];
@@ -1004,6 +1019,9 @@ impl App {
         }
         if let Route::Snap(only) = self.top().route
             && features::snap::key(self, only, ev, tx) {
+            return true;
+        }
+        if self.top().route == Route::Shortcut && features::summon::key(self, ev, tx) {
             return true;
         }
         if crate::packs::host::key(self, ev, tx) {

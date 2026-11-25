@@ -239,6 +239,86 @@ pub fn set(chord: &str) -> Result<(), String> {
     Ok(())
 }
 
+// ---- The palette's own recorder ---------------------------------------------------------
+
+/// The Change EchoSpot Shortcut screen: what it shows, and whether the new chord was taken (so
+/// leaving doesn't put the old one back over it).
+#[derive(Default)]
+pub struct Recorder {
+    pub current: String,
+    pub error: String,
+    pub saved: bool,
+}
+
+/// The screen opens: the summon chord is let go of, and the commands' hotkeys too, so whatever
+/// is pressed reaches the palette instead of running something.
+pub fn begin(app: &mut crate::app::App) {
+    let current = current();
+    release(&current);
+    app.bindings.suspend();
+    app.recorder = Recorder { current, error: String::new(), saved: false };
+}
+
+/// The screen is left, however: the old chord comes back unless a new one was taken.
+pub fn end(app: &mut crate::app::App) {
+    if !app.recorder.saved {
+        restore();
+    }
+    app.recorder = Recorder::default();
+    app.bindings.apply();
+}
+
+pub fn build(app: &crate::app::App) -> crate::app::Built {
+    let caps = |c: &str| crate::model::keycaps(c).join(" ");
+    let title = if app.recorder.error.is_empty() { "Press the new shortcut".to_string() } else { app.recorder.error.clone() };
+    let hint = format!("Now {}. Hold Super, Ctrl or Alt with a key. Esc keeps it; ⌫ puts back {}.", caps(&app.recorder.current), caps(DEFAULT));
+    crate::app::Built::list(crate::model::Sections::default(), "Press the new shortcut…").empty(&title, &hint)
+}
+
+/// A key on the screen: Escape leaves, Backspace puts back Omarchy's chord, and a chord with
+/// Super, Ctrl or Alt that no command's hotkey has becomes the shortcut.
+pub fn key(app: &mut crate::app::App, ev: &rune::KeyEvent, tx: &mut rune::Tx) -> bool {
+    use rune::Key;
+    if let Key::Modifier { .. } = ev.key {
+        return false;
+    }
+    let m = ev.mods;
+    let bare = !(m.logo || m.ctrl || m.cmd || m.alt || m.shift);
+    let chord = match ev.key {
+        Key::Escape if bare => {
+            app.pop(tx);
+            return true;
+        }
+        Key::Backspace | Key::Delete if bare => DEFAULT.to_string(),
+        _ => match crate::features::bindings::chord_of(ev, tx.key_base()) {
+            Some(chord) => chord,
+            None => return false,
+        },
+    };
+    let refused = if hypr_chord(&chord).is_none() {
+        Some("Add Super, Ctrl or Alt".to_string())
+    } else if let Some(other) = app.bindings.holder(&chord, "") {
+        let other = other.to_string();
+        let title = crate::features::root::catalog(app).into_iter().find(|c| c.id == other).map(|c| c.title).unwrap_or(other);
+        Some(format!("Used by {title}"))
+    } else {
+        set(&chord).err()
+    };
+    match refused {
+        Some(why) => {
+            app.recorder.error = why;
+            app.top_mut().query.clear();
+            app.refresh();
+        }
+        None => {
+            app.recorder.saved = true;
+            app.pop(tx);
+            app.toast(format!("EchoSpot Opens with {}", crate::model::keycaps(&current()).join(" ")), crate::app::Tone::Success);
+        }
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

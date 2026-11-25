@@ -28,6 +28,7 @@ fn builtins() -> Vec<Builtin> {
         Builtin { id: "cmd:quicklinks", title: "Search Quicklinks", keywords: "quicklink bookmark url link", icon: &icons::LINK, tint: Tint::Teal, route: Route::Quicklinks },
         Builtin { id: "cmd:notes", title: "Search Notes", keywords: "note markdown write memo", icon: &icons::FILE_TEXT, tint: Tint::Yellow, route: Route::Notes },
         Builtin { id: "cmd:schedule", title: "My Schedule", keywords: "calendar events meetings agenda today", icon: &icons::CLOCK, tint: Tint::Red, route: Route::Schedule },
+        Builtin { id: "cmd:shortcut", title: "Change EchoSpot Shortcut", keywords: "summon hotkey keybinding keyboard shortcut super space open launcher", icon: &icons::KEYBOARD, tint: Tint::Blue, route: Route::Shortcut },
         Builtin { id: "cmd:themes", title: "Change Theme", keywords: "omarchy theme appearance colors", icon: &icons::PALETTE, tint: Tint::Pink, route: Route::Themes },
         Builtin { id: "cmd:store", title: "Store", keywords: "raycast extensions install browse", icon: &icons::STORE, tint: Tint::Cyan, route: Route::Store },
         Builtin { id: "cmd:extensions", title: "Manage Extensions", keywords: "raycast extensions installed uninstall", icon: &icons::PUZZLE, tint: Tint::Green, route: Route::Extensions },

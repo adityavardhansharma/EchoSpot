@@ -43,6 +43,7 @@ pub fn route(name: &str) -> Option<Route> {
         "schedule" => Route::Schedule,
         "store" => Route::Store,
         "themes" => Route::Themes,
+        "shortcut" => Route::Shortcut,
         "ai" => Route::Ai,
         "extensions" => Route::Extensions,
         _ => return None,

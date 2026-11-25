@@ -288,6 +288,8 @@ pub enum Route {
     Store,
     Extensions,
     Themes,
+    /// Records a new shortcut to summon EchoSpot: `features::summon::Recorder`.
+    Shortcut,
     Ai,
     /// A page of Markdown: `App::page`.
     Page,
