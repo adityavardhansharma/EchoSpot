@@ -424,6 +424,12 @@ pub fn refresh(app: &mut App, force: bool) {
         }
         events.sort_by(|a, b| a.start.cmp(&b.start).then(b.all_day.cmp(&a.all_day)));
         me.update(move |s: &mut App, _| {
+            // The calendars changed while these were read (a restore, a calendar added): these
+            // are the old ones' events, so they are read again.
+            if s.settings.calendars != sources {
+                s.schedule.loading = false;
+                return refresh(s, true);
+            }
             // A first load lands on the first event, not on the row that was there while it was empty.
             let first = s.schedule.events.is_empty();
             s.schedule = Schedule { events, loading: false, read_at: util::now_secs(), error };
