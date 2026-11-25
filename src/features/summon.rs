@@ -209,6 +209,52 @@ fn bind_live(old: Option<&str>, hypr: &str, syntax: Syntax) {
     });
 }
 
+/// The Hyprland submap a recorder listens in: it binds nothing anyone can press, so while it is
+/// on, every key (Super by itself, which Omarchy's menu takes on release, included) reaches the
+/// window that has the keyboard instead of a binding.
+const SUBMAP: &str = "echospot-record";
+
+fn token_file() -> PathBuf {
+    util::runtime_dir().join("echospot-record")
+}
+
+/// Takes every key press for a recorder until `release_keys`. A minute later it is given back
+/// whatever happens, by a process of its own, so a recorder that crashed can't keep the keyboard.
+pub fn capture_keys() {
+    if !crate::features::windows::hyprland() {
+        return;
+    }
+    let lua = config_file().is_none_or(|p| syntax_of(&p) == Syntax::Lua);
+    if lua {
+        // A submap with nothing in it isn't registered: it holds one chord no keyboard has, a way out.
+        let define = format!("hl.define_submap({s}, function() hl.bind(\"SUPER + CTRL + ALT + SHIFT + F24\", hl.dsp.submap(\"reset\")) end)", s = lua_string(SUBMAP));
+        util::output("hyprctl", &["eval", &define]);
+        util::output("hyprctl", &["dispatch", &format!("hl.dsp.submap({})", lua_string(SUBMAP))]);
+    } else {
+        util::output("hyprctl", &["--batch", &format!("keyword submap {SUBMAP}; keyword bind SUPER CTRL ALT SHIFT, F24, submap, reset; keyword submap reset")]);
+        util::output("hyprctl", &["dispatch", "submap", SUBMAP]);
+    }
+    let token = format!("{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0));
+    let file = token_file();
+    let _ = std::fs::write(&file, &token);
+    let reset = if lua { "hyprctl dispatch 'hl.dsp.submap(\"reset\")'" } else { "hyprctl dispatch submap reset" };
+    let file = util::quote(&file.display().to_string());
+    util::sh_detached(&format!("sleep 60; [ \"$(cat {file} 2>/dev/null)\" = {} ] && rm -f {file} && {reset}", util::quote(&token)));
+}
+
+/// Gives the key presses back to Hyprland's bindings.
+pub fn release_keys() {
+    if std::fs::remove_file(token_file()).is_err() || !crate::features::windows::hyprland() {
+        return;
+    }
+    if util::output("hyprctl", &["submap"]).as_deref() != Some(SUBMAP) {
+        return;
+    }
+    if util::output("hyprctl", &["dispatch", "hl.dsp.submap(\"reset\")"]).is_none_or(|o| o.contains("rror")) {
+        util::output("hyprctl", &["dispatch", "submap", "reset"]);
+    }
+}
+
 /// Puts the summon back on the chord the config has, after a recording let go of it.
 pub fn restore() {
     let Some(path) = config_file() else { return };
@@ -256,11 +302,13 @@ pub fn begin(app: &mut crate::app::App) {
     let current = current();
     release(&current);
     app.bindings.suspend();
+    capture_keys();
     app.recorder = Recorder { current, error: String::new(), saved: false };
 }
 
 /// The screen is left, however: the old chord comes back unless a new one was taken.
 pub fn end(app: &mut crate::app::App) {
+    release_keys();
     if !app.recorder.saved {
         restore();
     }

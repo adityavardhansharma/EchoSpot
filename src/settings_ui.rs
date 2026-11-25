@@ -530,6 +530,7 @@ impl SettingsUi {
             tell_main(|app| app.bindings.suspend());
         }
         self.editing = Editing::Recording { id: id.to_string(), held: Mods::default(), error: String::new() };
+        crate::features::summon::capture_keys();
     }
 
     /// Stops listening without a change, and has the palette take its hotkeys back.
@@ -540,6 +541,7 @@ impl SettingsUi {
             _ => return,
         }
         self.editing = Editing::None;
+        crate::features::summon::release_keys();
         tell_main(|app| app.bindings.apply());
     }
 
@@ -555,6 +557,7 @@ impl SettingsUi {
         self.armed = None;
         tx.blur();
         crate::features::summon::release(&self.summon);
+        crate::features::summon::capture_keys();
         if !rows_held {
             tell_main(|app| app.bindings.suspend());
         }
@@ -592,6 +595,7 @@ impl SettingsUi {
             None => {
                 self.summon = crate::features::summon::current();
                 self.editing = Editing::None;
+                crate::features::summon::release_keys();
                 tell_main(|app| app.bindings.apply());
             }
         }
@@ -601,6 +605,7 @@ impl SettingsUi {
         self.bindings.set_hotkey(id, chord);
         if self.editing.recording().is_some() {
             self.editing = Editing::None;
+            crate::features::summon::release_keys();
         }
         // Applying registers the hotkeys again, the ones a recording let go of included.
         self.push_bindings(true);
