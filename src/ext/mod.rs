@@ -204,7 +204,8 @@ pub fn parse_interval(text: &str) -> Option<u64> {
         "d" => 86_400,
         _ => return None,
     };
-    Some((n * unit).max(60))
+    // A manifest's typo of a huge number is never, not an overflow.
+    Some(n.checked_mul(unit)?.max(60))
 }
 
 fn read_manifest(dir: &Path) -> Option<Installed> {
