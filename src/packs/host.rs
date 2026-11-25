@@ -353,8 +353,7 @@ pub fn rows(app: &App) -> Vec<(Item, String)> {
                 "panel" => op("Open", &icons::ARROW_UP_RIGHT, PackOp::Open { pack: pack.id.clone(), target: format!("surface:{surface}"), args: json!({}) }),
                 _ => op(if showing { "Hide" } else { "Show" }, &icons::EYE, PackOp::Surface { pack: pack.id.clone(), name: surface.clone() }),
             };
-            let mut label = kind.to_string();
-            label[..1].make_ascii_uppercase();
+            let label = crate::util::capitalize(kind);
             let mut item = Item::new(format!("pack:{}:surface:{surface}", pack.id), s.title.clone(), host.icon(&pack.id, if s.icon.is_empty() { "window" } else { &s.icon }, "")).trailing(&label)
                 .action(first).action(folder.clone().section(""));
             if showing {

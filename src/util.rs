@@ -165,6 +165,13 @@ pub fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// The word with its first letter upper case: "panel" reads "Panel". Safe for any first
+/// character, unlike slicing off the first byte.
+pub fn capitalize(word: &str) -> String {
+    let mut chars = word.chars();
+    chars.next().map(|first| first.to_uppercase().collect::<String>() + chars.as_str()).unwrap_or_default()
+}
+
 /// The first `max` characters, with an ellipsis when cut.
 pub fn truncate(s: &str, max: usize) -> String {
     let mut out: String = s.chars().take(max).collect();

@@ -76,7 +76,7 @@ fn icon(name: &str) -> &'static str {
 
 /// A name for people from an id: `focus-timer` reads "Focus Timer".
 pub fn title(id: &str) -> String {
-    id.split('-').filter(|w| !w.is_empty()).map(|w| w[..1].to_uppercase() + &w[1..]).collect::<Vec<_>>().join(" ")
+    id.split('-').filter(|w| !w.is_empty()).map(crate::util::capitalize).collect::<Vec<_>>().join(" ")
 }
 
 /// The files of a new pack, by path.
