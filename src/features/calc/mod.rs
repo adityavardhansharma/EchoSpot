@@ -1037,3 +1037,36 @@ mod tests {
         assert_eq!(plain("43 days"), "43");
     }
 }
+
+#[cfg(test)]
+mod never_panics {
+    /// What is typed reaches the calculator on every key, so no text may panic it. These are the
+    /// inputs that once did, and a deterministic spray of fragments around them.
+    #[test]
+    fn typed_text() {
+        for once in ["utc+ →", "99999999999999999991h30m", "99999999999999999993h3h ist", "in 3 days 9999999999999999999 days eur in usd sqrt日monday"] {
+            super::evaluate(once);
+        }
+        let atoms = ["1", "2.5", "½", "-", "+", "*", "/", "^", "%", "(", ")", "in", "to", "km", "usd", "$", "€", "é", "İ", "日", "days", "until", "dec", "5pm",
+            "london", "utc+", "hex", "0x", "ff", ".", ",", "what", "of", "is", "as", "how many", "ft", "sqrt", "→", "->", "now", "week", "number", "1e308",
+            "9999999999999999999", "999999999", "°", "between", "and", "from", "ago", "next", "monday", "2026", ":", "30", "1h30m", "years from now"];
+        let mut seed: u64 = 0x1234_5678_9abc_def0;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..20_000 {
+            let mut s = String::new();
+            for _ in 0..next() % 6 + 1 {
+                let n = next();
+                s.push_str(atoms[(n % atoms.len() as u64) as usize]);
+                if n & 1 == 0 {
+                    s.push(' ');
+                }
+            }
+            super::evaluate(&s);
+        }
+    }
+}
