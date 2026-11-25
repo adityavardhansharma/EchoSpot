@@ -1558,7 +1558,11 @@ impl Host {
                 let key = format!("{}@{starts}", event.get("title").and_then(Value::as_str).unwrap_or(""));
                 if starts > now && starts - now <= 600.0 && !self.seen.soon.contains(&key) {
                     self.seen.soon.push(key);
-                    self.seen.soon.truncate(64);
+                    // The oldest are forgotten; truncating would forget the one just noted.
+                    if self.seen.soon.len() > 64 {
+                        let extra = self.seen.soon.len() - 64;
+                        self.seen.soon.drain(..extra);
+                    }
                     any |= self.rt.emit("calendar.soon", event.clone()) > 0;
                 }
             }
