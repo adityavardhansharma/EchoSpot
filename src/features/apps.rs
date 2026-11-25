@@ -62,11 +62,18 @@ fn parse(path: &Path, id: String, locales: &[String]) -> Option<AppEntry> {
     if fields.get("Type").is_some_and(|t| *t != "Application") || flag("NoDisplay") || flag("Hidden") {
         return None;
     }
-    if let Some(only) = fields.get("OnlyShowIn") {
-        let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
-        if !only.split(';').any(|d| !d.is_empty() && desktop.split(':').any(|c| c.eq_ignore_ascii_case(d))) {
+    // An entry whose TryExec program is not installed is a leftover (an uninstalled package's
+    // file, a flatpak's export after removal): the spec says to leave it out.
+    if let Some(try_exec) = fields.get("TryExec").map(|t| t.trim()).filter(|t| !t.is_empty()) {
+        let found = if try_exec.contains('/') { Path::new(try_exec).is_file() } else { crate::util::has_program(try_exec) };
+        if !found {
             return None;
         }
+    }
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    let ours = |list: &str| list.split(';').any(|d| !d.is_empty() && desktop.split(':').any(|c| c.eq_ignore_ascii_case(d)));
+    if fields.get("OnlyShowIn").is_some_and(|only| !ours(only)) || fields.get("NotShowIn").is_some_and(|not| ours(not)) {
+        return None;
     }
     let localized = |key: &str| {
         locales.iter().find_map(|l| fields.get(format!("{key}[{l}]").as_str()).copied()).or_else(|| fields.get(key).copied())
