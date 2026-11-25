@@ -863,8 +863,12 @@ pub fn poll(app: &mut App, tx: &mut Tx) -> bool {
                 let method = message.get("method").and_then(Value::as_str).unwrap_or("");
                 let args = message.get("args").and_then(Value::as_array).cloned().unwrap_or_default();
                 let call_id = message.get("id").and_then(Value::as_u64).unwrap_or(0);
-                // A scheduled run has no audience: what it would show is dropped.
+                // A scheduled run has no audience: what it would show is dropped, and a question
+                // it asks is answered no rather than left to hang the run.
                 if app.ext.session(id).is_some_and(|s| s.background) && matches!(method, "toast" | "hud" | "closeMainWindow" | "popToRoot" | "clearSearchBar" | "confirm" | "openPreferences") {
+                    if method == "confirm" {
+                        reply_confirm(app, id, call_id, false);
+                    }
                     continue;
                 }
                 match method {
