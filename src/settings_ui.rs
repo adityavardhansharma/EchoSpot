@@ -158,7 +158,7 @@ enum Editing {
     /// pressed was not taken.
     Recording { id: String, held: Mods, error: String },
     /// The shortcut that summons EchoSpot is being recorded, in General.
-    Summon { held: Mods, error: String },
+    Summon { held: Mods, error: String, lone: bool },
 }
 
 impl Editing {
@@ -553,7 +553,7 @@ impl SettingsUi {
         }
         let rows_held = self.editing.recording().is_some();
         self.end_alias(false);
-        self.editing = Editing::Summon { held: Mods::default(), error: String::new() };
+        self.editing = Editing::Summon { held: Mods::default(), error: String::new(), lone: false };
         self.armed = None;
         tx.blur();
         crate::features::summon::release(&self.summon);
@@ -567,7 +567,11 @@ impl SettingsUi {
     /// back Omarchy's own, and anything else is the shortcut if Hyprland can bind it and no
     /// command's hotkey has it.
     fn summon_key(&mut self, ev: &KeyEvent, base: Option<char>) {
-        if let Key::Modifier { .. } = ev.key {
+        let tapped = match &mut self.editing {
+            Editing::Summon { lone, .. } => crate::features::summon::super_tapped(ev, lone),
+            _ => return,
+        };
+        if !tapped && let Key::Modifier { .. } = ev.key {
             if let Editing::Summon { held, .. } = &mut self.editing {
                 *held = ev.mods;
             }
@@ -576,6 +580,7 @@ impl SettingsUi {
         let m = ev.mods;
         let bare = !(m.logo || m.ctrl || m.cmd || m.alt || m.shift);
         let chord = match ev.key {
+            _ if tapped => crate::features::summon::SUPER_ALONE.to_string(),
             Key::Escape if bare => return self.stop_recording(),
             Key::Backspace | Key::Delete if bare => crate::features::summon::DEFAULT.to_string(),
             _ => match bindings::chord_of(ev, base) {
@@ -583,7 +588,7 @@ impl SettingsUi {
                 None => return,
             },
         };
-        let refused = if bindings::hypr_chord(&chord).is_none() {
+        let refused = if !crate::features::summon::usable(&chord) {
             Some("Add Super, Ctrl or Alt".to_string())
         } else if let Some(other) = self.bindings.holder(&chord, "") {
             Some(format!("Used by {}", self.title_of(other)))
@@ -1028,7 +1033,7 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
         noted(p, "Shortcut", card(p, vec![
             setting(p, "Summon EchoSpot", "Click the shortcut, then press the new one.", summon_cell(ui, p)),
         ]), match (&ui.editing, &ui.summon_file) {
-            (Editing::Summon { .. }, _) => "Press the keys to use, with Super, Ctrl or Alt among them. ⌫ puts back Super Space; esc keeps the old one.".to_string(),
+            (Editing::Summon { .. }, _) => "Tap Super by itself, or press keys with Super, Ctrl or Alt among them. ⌫ puts back Super Space; esc keeps the old one. Super by itself takes it from the Omarchy menu.".to_string(),
             (_, Some(file)) => format!("Bound in {} to `echospot toggle`, so it works even while EchoSpot isn't running.", crate::util::tilde(file)),
             (_, None) => "No Hyprland config was found to bind it in.".to_string(),
         }),
@@ -1037,7 +1042,7 @@ fn general(ui: &SettingsUi, p: &Palette) -> Vec<El> {
 
 /// The summon shortcut, as keycaps to click, or the recorder listening for a new one.
 fn summon_cell(ui: &SettingsUi, p: &Palette) -> El {
-    if let Editing::Summon { held: m, error } = &ui.editing {
+    if let Editing::Summon { held: m, error, .. } = &ui.editing {
         let held: Vec<&str> = [(m.logo, "super"), (m.ctrl || m.cmd, "ctrl"), (m.alt, "alt"), (m.shift, "shift")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect();
         let failed = !error.is_empty();
         let inside = if failed {

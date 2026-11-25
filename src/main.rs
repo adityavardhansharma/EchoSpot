@@ -186,7 +186,8 @@ fn main() {
         transparent: true, borderless: true, resizable: false, visible: !headless && show_now,
         min_size: Some((0.0, 0.0)), ..Default::default()
     };
-    let mut app = rune::App::new(spec).window_options(options).on_focus(on_focus).compositor(glass::Glass::default());
+    // Modifier keys by themselves reach `on_key`: Super tapped alone can be recorded as the shortcut.
+    let mut app = rune::App::new(spec).window_options(options).on_focus(on_focus).compositor(glass::Glass::default()).modifier_keys();
     if !headless {
         // `echospot://` and `raycast://` links reach the resident palette from a browser or a notification.
         std::thread::spawn(ext::register_link_handler);

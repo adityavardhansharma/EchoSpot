@@ -1008,6 +1008,10 @@ impl App {
 
     /// Keys in the search field, before the field's own editor sees them.
     pub fn key(&mut self, ev: &KeyEvent, tx: &mut Tx) -> bool {
+        // A modifier by itself means something only to the shortcut recorder (Super tapped alone).
+        if matches!(ev.key, Key::Modifier { .. }) && self.top().route != Route::Shortcut {
+            return false;
+        }
         if self.dialog.is_some() {
             return self.dialog_key(ev, tx);
         }
