@@ -249,25 +249,36 @@ fn occurrences(first: &Stamp, r: &Rule, limit: i64) -> Vec<NaiveDateTime> {
         true
     };
     // A bound on the walk, for a rule that started long ago or never ends.
+    // A feed is someone else's text: an interval that walks off the calendar ends the walk.
+    let days_on = |d: NaiveDate, n: i64| Duration::try_days(n).and_then(|delta| d.checked_add_signed(delta));
     for step in 0..6000i64 {
-        let k = step * r.interval;
+        let Some(k) = step.checked_mul(r.interval) else { break };
         let more = match r.freq.as_str() {
-            "DAILY" => push(date + Duration::days(k), &mut out),
+            "DAILY" => match days_on(date, k) {
+                Some(d) => push(d, &mut out),
+                None => false,
+            },
             "WEEKLY" => {
-                let monday = date - Duration::days(date.weekday().num_days_from_monday() as i64) + Duration::weeks(k);
+                let Some(monday) = k.checked_mul(7).and_then(|days| days_on(date, days - date.weekday().num_days_from_monday() as i64)) else { break };
                 let mut days: Vec<Weekday> = if r.by_day.is_empty() { vec![date.weekday()] } else { r.by_day.iter().map(|(_, d)| *d).collect() };
                 days.sort_by_key(|d| d.num_days_from_monday());
                 days.iter().all(|d| push(monday + Duration::days(d.num_days_from_monday() as i64), &mut out))
             }
             "MONTHLY" => {
-                let months = date.year() as i64 * 12 + date.month0() as i64 + k;
-                let (year, month) = (months.div_euclid(12) as i32, months.rem_euclid(12) as u32 + 1);
-                month_dates(r, year, month, date.day()).into_iter().all(|d| push(d, &mut out))
+                let Some(months) = (date.year() as i64 * 12 + date.month0() as i64).checked_add(k) else { break };
+                let Ok(year) = i32::try_from(months.div_euclid(12)) else { break };
+                if NaiveDate::from_ymd_opt(year, 1, 1).is_none() {
+                    break;
+                }
+                month_dates(r, year, months.rem_euclid(12) as u32 + 1, date.day()).into_iter().all(|d| push(d, &mut out))
             }
-            "YEARLY" => match NaiveDate::from_ymd_opt(date.year() + k as i32, date.month(), date.day()) {
-                Some(d) => push(d, &mut out),
-                None => true,
-            },
+            "YEARLY" => {
+                let Some(year) = i32::try_from(k).ok().and_then(|k| date.year().checked_add(k)).filter(|y| NaiveDate::from_ymd_opt(*y, 1, 1).is_some()) else { break };
+                match NaiveDate::from_ymd_opt(year, date.month(), date.day()) {
+                    Some(d) => push(d, &mut out),
+                    None => true,
+                }
+            }
             _ => {
                 push(date, &mut out);
                 false
