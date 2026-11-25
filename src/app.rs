@@ -135,10 +135,7 @@ pub struct App {
     pub ai_library: features::ai_library::Library,
     pub form: Option<features::forms::Form>,
     pub clock: f64,
-    pub scale: f32,
     pub visible: bool,
-    /// Hide when focus leaves; off while a file dialog or a paste owns the moment.
-    pub hide_on_blur: bool,
     pub settings: crate::settings::Settings,
     /// The screen behind the panel, captured as it was summoned.
     pub backdrop: rune::Pixels,
@@ -185,9 +182,7 @@ impl App {
             ai_library: features::ai_library::Library::load(),
             form: None,
             clock: 0.0,
-            scale: 2.0,
             visible: false,
-            hide_on_blur: true,
             settings: crate::settings::Settings::load(),
             backdrop: rune::Pixels::new(),
             has_backdrop: false,
@@ -441,7 +436,6 @@ impl App {
         self.chat.toolbox = crate::packs::host::toolbox(self);
         self.visible = true;
         self.was_focused = false;
-        self.hide_on_blur = true;
         self.refresh();
         self.read_status();
         // A Hyprland config reload drops runtime bindings; a summon puts the hotkeys back.

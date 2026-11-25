@@ -81,7 +81,7 @@ fn on_focus(s: &mut App, focused: bool, tx: &mut Tx) {
     // A new Wayland window hears "unfocused" before its first focus; only a real loss hides.
     if focused {
         s.was_focused = true;
-    } else if s.was_focused && s.visible && s.hide_on_blur && s.settings.hide_on_blur {
+    } else if s.was_focused && s.visible && s.settings.hide_on_blur {
         s.hide(tx);
     }
     if std::env::var_os("ECHOSPOT_DEBUG").is_some() {
