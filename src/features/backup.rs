@@ -85,15 +85,18 @@ pub fn export(target: &Path, secrets: bool) -> Result<usize, String> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent).map_err(io)?;
     }
+    if secrets {
+        // A backup with keys is private before tar writes a byte of it: tar truncates an
+        // existing file and keeps its mode, where a chmod afterwards leaves a moment it isn't.
+        use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(target).map_err(io)?;
+        std::fs::set_permissions(target, std::fs::Permissions::from_mode(0o600)).map_err(io)?;
+    }
     let ok = std::process::Command::new("tar").arg("-czf").arg(target).arg("-C").arg(&stage).arg("echospot-backup")
         .status().is_ok_and(|s| s.success());
     let _ = std::fs::remove_dir_all(&stage);
     if !ok {
         return Err("Could not write the backup: tar failed.".into());
-    }
-    if secrets {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(target, std::fs::Permissions::from_mode(0o600));
     }
     Ok(count)
 }
@@ -132,9 +135,7 @@ pub fn restore(archive: &Path) -> Result<usize, String> {
                 && let (Some(ai), Some(keys)) = (incoming.get_mut("ai").and_then(Value::as_object_mut), current.get("ai").and_then(|ai| ai.get("keys"))) {
                 ai.insert("keys".into(), keys.clone());
             }
-            util::write_json(&config.join(name), &incoming);
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(config.join(name), std::fs::Permissions::from_mode(0o600));
+            util::write_json_private(&config.join(name), &incoming);
         } else {
             copy_all(&from, &config.join(name)).map_err(io)?;
         }
