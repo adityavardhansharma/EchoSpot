@@ -298,19 +298,7 @@ fn recent() -> Vec<PathBuf> {
 }
 
 fn percent_decode(s: &str) -> String {
-    let bytes = s.as_bytes();
-    let (mut out, mut i) = (Vec::with_capacity(bytes.len()), 0);
-    while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len()
-            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-            out.push(v);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).to_string()
+    String::from_utf8_lossy(&crate::ext::net::percent_decode(s)).to_string()
 }
 
 pub fn build(app: &App, query: &str) -> Built {

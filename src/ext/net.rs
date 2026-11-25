@@ -144,8 +144,10 @@ pub fn percent_decode(text: &str) -> Vec<u8> {
     let bytes = text.as_bytes();
     let (mut out, mut i) = (Vec::with_capacity(bytes.len()), 0);
     while i < bytes.len() {
+        // The two bytes after `%` are read as bytes: a character of several bytes there is not
+        // cut through the middle.
         if bytes[i] == b'%' && i + 2 < bytes.len()
-            && let Ok(v) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+            && let Some(v) = std::str::from_utf8(&bytes[i + 1..i + 3]).ok().and_then(|hex| u8::from_str_radix(hex, 16).ok()) {
             out.push(v);
             i += 3;
             continue;
@@ -180,4 +182,14 @@ pub fn data_uri(uri: &str) -> Option<PathBuf> {
 /// GETs a URL and returns its body. Blocking: call from a worker.
 pub fn get(url: &str) -> Option<String> {
     util::output("curl", &["-sL", "--max-time", "20", "-A", "Mozilla/5.0 (X11; Linux x86_64) EchoSpot", url])
+}
+
+#[cfg(test)]
+mod decode_tests {
+    #[test]
+    fn percent_signs_before_wide_characters() {
+        assert_eq!(super::percent_decode("a%20b"), b"a b");
+        assert_eq!(super::percent_decode("%€x"), "%€x".as_bytes());
+        assert_eq!(super::percent_decode("100%"), b"100%");
+    }
 }
