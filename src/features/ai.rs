@@ -722,7 +722,7 @@ pub fn set_model(app: &mut App, index: usize) {
     let Some((provider, model)) = app.settings.ai.choices().get(index).cloned() else { return };
     app.settings.ai.set_provider(&provider);
     app.settings.ai.use_model(&model);
-    app.settings.save();
+    app.save_settings();
 }
 
 fn chat_actions(app: &App, asking: bool) -> Vec<Action> {
@@ -916,7 +916,7 @@ pub fn perform(app: &mut App, op: AiOp, tx: &mut Tx) {
             app.chat.preset = preset.name;
             if !preset.model.is_empty() {
                 app.settings.ai.use_model(&preset.model);
-                app.settings.save();
+                app.save_settings();
             }
             if app.top().route != Route::Ai {
                 app.push(Route::Ai, tx);
@@ -956,14 +956,14 @@ pub fn perform(app: &mut App, op: AiOp, tx: &mut Tx) {
             }
             ai.web_search = !ai.web_search;
             let on = ai.web_search;
-            app.settings.save();
+            app.save_settings();
             app.refresh_keeping();
             app.toast(if on { "Web Search On" } else { "Web Search Off" }, Tone::Success);
         }
         AiOp::ToggleTools => {
             app.settings.ai.tools = !app.settings.ai.tools;
             let on = app.settings.ai.tools;
-            app.settings.save();
+            app.save_settings();
             app.refresh_keeping();
             app.toast(if on { "Tools On" } else { "Tools Off" }, Tone::Success);
         }

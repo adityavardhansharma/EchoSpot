@@ -738,6 +738,27 @@ pub fn open(pane: &str) {
     window.open();
 }
 
+/// The palette changed the settings (a model picked in the chat, a folder excluded): Settings
+/// takes them, keeping only what is being typed in its own fields.
+pub fn sync(settings: Settings) {
+    let Some((handle, _)) = WINDOW.get() else { return };
+    handle.update(move |ui, _| {
+        if !ui.model.focused {
+            ui.model.replace_text(settings.ai.model.clone());
+        }
+        if !ui.api_key.focused {
+            ui.api_key.replace_text(settings.ai.keys.get(&settings.ai.provider).cloned().unwrap_or_default());
+        }
+        if !ui.base_url.focused {
+            ui.base_url.replace_text(settings.ai.base_url.clone());
+        }
+        if !ui.system_prompt.focused {
+            ui.system_prompt.replace_text(settings.ai.system_prompt.clone());
+        }
+        ui.settings = settings;
+    });
+}
+
 fn tell_main(f: impl FnOnce(&mut App) + Send + 'static) {
     if let Some(main) = MAIN.get() {
         main.update(move |app: &mut App, _| {

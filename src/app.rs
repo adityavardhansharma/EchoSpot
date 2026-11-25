@@ -310,6 +310,13 @@ impl App {
         self.refresh();
     }
 
+    /// Writes the settings, and hands them to the Settings window, which would otherwise write
+    /// back what it read when it opened the next time anything there is touched.
+    pub fn save_settings(&self) {
+        self.settings.save();
+        crate::settings_ui::sync(self.settings.clone());
+    }
+
     /// Reads everything kept on disk again: after a restore, or when another process changed it.
     pub fn reload_stores(&mut self) {
         self.settings = crate::settings::Settings::load();

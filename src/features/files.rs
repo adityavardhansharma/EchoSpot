@@ -267,7 +267,7 @@ pub fn perform(app: &mut App, op: FileOp, _tx: &mut rune::Tx) {
             let excluded = &mut app.settings.files.excluded;
             if !excluded.iter().any(|f| typed_folder(f, &home).as_ref() == Some(&folder)) {
                 excluded.push(util::tilde(&folder));
-                app.settings.save();
+                app.save_settings();
             }
             let name = folder.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
             app.toast(format!("{} Excluded from Search", util::truncate(&name, 28)), Tone::Success);

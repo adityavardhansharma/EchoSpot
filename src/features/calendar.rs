@@ -624,7 +624,7 @@ pub fn perform(app: &mut App, op: CalOp, tx: &mut Tx) {
         }
         CalOp::Remove(source) => {
             app.settings.calendars.retain(|c| *c != source);
-            app.settings.save();
+            app.save_settings();
             let _ = std::fs::remove_file(cache_file(&source));
             app.schedule.read_at = 0;
             refresh(app, false);
@@ -646,7 +646,7 @@ pub fn save(app: &mut App, tx: &mut Tx) {
     }
     if !app.settings.calendars.contains(&source) {
         app.settings.calendars.push(source);
-        app.settings.save();
+        app.save_settings();
     }
     app.pop(tx);
     refresh(app, true);
