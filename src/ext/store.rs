@@ -135,7 +135,10 @@ pub fn build(app: &mut App, query: &str) -> Built {
         item.accessories.push(Accessory { icon: None, text: if busy { "Installing…".into() } else if installed { "Installed".into() } else { count(l.downloads) }, tag: None });
         item = if installed {
             item.action(Action::new("Reinstall Extension", &icons::DOWNLOAD, Act::Ext(ExtAct::Install(Box::new(l.clone())))))
-                .action(Action::new("Uninstall Extension", &icons::TRASH, Act::Ext(ExtAct::Uninstall(l.id()))).destructive())
+                .action(Action::new("Uninstall Extension", &icons::TRASH, Act::Confirm(Box::new(Confirm {
+                    title: format!("Uninstall {}?", l.title), message: "Its commands and saved preferences are removed.".into(),
+                    icon: &icons::TRASH, confirm: "Uninstall".into(), destructive: true, act: Act::Ext(ExtAct::Uninstall(l.id())),
+                }))).destructive())
         } else {
             item.action(Action::new("Install Extension", &icons::DOWNLOAD, Act::Ext(ExtAct::Install(Box::new(l.clone())))))
         };
