@@ -799,6 +799,17 @@ pub fn perform(app: &mut App, act: ExtAct, tx: &mut Tx) {
         ExtAct::InstallDemo => store::install_demo(app),
         ExtAct::Uninstall(id) => {
             if let Some(ext) = app.ext.get(&id).cloned() {
+                // Its commands that are running go first: their screens, then their processes,
+                // which would otherwise run on from a folder that is gone.
+                let running: Vec<u64> = app.ext.sessions.iter().filter(|s| s.extension == ext.id).map(|s| s.id).collect();
+                if let Some(at) = app.screens.iter().position(|s| matches!(s.route, Route::Ext(sid) if running.contains(&sid))) {
+                    app.screens.truncate(at.max(1));
+                    app.form = None;
+                    app.top_mut().query.focused = true;
+                }
+                for session in running {
+                    app.ext.stop(session);
+                }
                 let _ = std::fs::remove_dir_all(&ext.dir);
                 let _ = std::fs::remove_file(prefs_path(&ext.name));
                 app.ext.rescan();
