@@ -10,7 +10,9 @@ A native Raycast alternative for Omarchy, built with [Rune](https://github.com/a
 ## Features
 
 - **Command Palette & Launcher**: Fast application launcher and system commands. Any row can
-  have an **alias** and a **global hotkey** (Ctrl+Shift+K on the row).
+  have an **alias** and a **global hotkey** (Ctrl+Shift+K on the row). The shortcut that
+  summons EchoSpot (Super+Space) is changed in Settings → General, or with
+  `echospot shortcut <chord>`.
 - **Calculator**: Arithmetic in symbols or words, percentages, functions, number bases, unit conversions and unit arithmetic, live currency and crypto rates, date maths and countdowns (`days until 25 dec`), and time zones (`5pm london in tokyo`). Also `echospot calc <expression>` from a terminal.
 - **Clipboard History**: Resident clipboard manager for text and images.
 - **Emoji & Symbols**: Searchable emoji and symbol catalogue with recents and pins.

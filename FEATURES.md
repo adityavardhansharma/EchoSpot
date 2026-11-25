@@ -69,8 +69,12 @@ Display (one monitor). Not built: custom sizes and saved window layouts ("Rooms"
 - [x] Global hotkey per command: registered at startup and on every summon with
       `hyprctl eval 'hl.unbind(k); hl.bind(k, …)'` calling `echospot run <id>`
 - [x] Alias and hotkey shown on the row
-- [ ] Hotkeys and aliases listed (and removable) in Settings
+- [x] Hotkeys and aliases listed (and removable) in Settings → Commands
 - [ ] Hotkeys come back right after `hyprctl reload` (today: on the next summon)
+- [x] The summon shortcut itself is changeable (`src/features/summon.rs`): Settings → General →
+      Shortcut records a chord, or `echospot shortcut super+alt+space`. It is rewritten in place in
+      the Hyprland config that binds `echospot toggle` (Lua or hyprlang, through symlinks) and
+      bound in the running compositor at once, so it works while EchoSpot isn't running
 
 Verified: chord parsing (unit test); binding appears in `hyprctl binds`; `run` opens a view
 command and reports an unknown id; alias ranking and the form checked in headless snapshots.
