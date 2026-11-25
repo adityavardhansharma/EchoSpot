@@ -125,6 +125,10 @@ fn fixed(word: &str) -> Option<Zone> {
         _ => return None,
     };
     let digits = &rest[rest.chars().next()?.len_utf8()..];
+    // Hours and minutes are digits and nothing else: a sign or a letter after `utc+` is no offset.
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit() || c == ':') {
+        return None;
+    }
     let (h, m): (i32, i32) = match digits.split_once(':') {
         Some((h, m)) => (h.parse().ok()?, m.parse().ok()?),
         None if digits.len() == 4 => (digits[..2].parse().ok()?, digits[2..].parse().ok()?),
