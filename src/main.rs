@@ -111,12 +111,16 @@ fn main() {
             // A hotkey's command: only a resident palette can run a row.
             if args.len() < 2 || !ipc::send(&args.join(" ")) {
                 eprintln!("echospot run <command-id>: needs a running EchoSpot. `echospot commands` lists the ids.");
+                std::process::exit(1);
             }
             return;
         }
         "commands" => return match ipc::ask("commands") {
             Some(list) => println!("{list}"),
-            None => eprintln!("echospot commands: needs a running EchoSpot."),
+            None => {
+                eprintln!("echospot commands: needs a running EchoSpot.");
+                std::process::exit(1);
+            }
         },
         // Packs: what a coding agent builds and checks them with.
         "dev" => std::process::exit(packs::cli::dev(&args[1..])),
