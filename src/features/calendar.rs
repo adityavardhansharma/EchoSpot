@@ -694,4 +694,13 @@ mod tests {
         assert_eq!(duration("PT1H30M"), Some(5400));
         assert_eq!(duration("P1D"), Some(86_400));
     }
+
+    #[test]
+    fn a_runaway_interval_ends_the_walk() {
+        for rule in ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] {
+            let feed = format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART:20260101T100000Z\nRRULE:FREQ={rule};INTERVAL=999999999999\nSUMMARY:x\nEND:VEVENT\nEND:VCALENDAR\n");
+            let events = parse(&feed, utc("2026-01-01 00:00"), utc("2026-02-01 00:00"));
+            assert_eq!(events.len(), 1, "{rule}");
+        }
+    }
 }
