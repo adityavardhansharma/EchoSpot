@@ -394,6 +394,8 @@ impl App {
 
     pub fn hide(&mut self, tx: &mut Tx) {
         self.visible = false;
+        // The screen behind stops being captured now, not when the feed next notices the window gone.
+        crate::seethrough::stop("palette");
         self.reset();
         tx.settle();
         tx.close_window();

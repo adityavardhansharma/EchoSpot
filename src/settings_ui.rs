@@ -1693,6 +1693,7 @@ pub fn view(ui: &SettingsUi, cx: &mut Cx<SettingsUi>) -> El {
 fn close(ui: &mut SettingsUi, tx: &mut Tx) {
     ui.stop_recording();
     ui.end_alias(false);
+    crate::seethrough::stop("settings");
     tx.close_window();
 }
 
