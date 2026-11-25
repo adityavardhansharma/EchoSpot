@@ -218,7 +218,10 @@ pub fn cli(command: &str, args: &[String]) {
             let target = path.unwrap_or_else(default_target);
             match export(&target, secrets) {
                 Ok(count) => println!("{count} items saved to {}{}", target.display(), if secrets { " (with keys: keep it private)" } else { " (without API keys; add --with-keys to include them)" }),
-                Err(e) => eprintln!("{e}"),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
             }
         }
         _ => match path {
@@ -229,9 +232,15 @@ pub fn cli(command: &str, args: &[String]) {
                         println!("The running EchoSpot has reloaded.");
                     }
                 }
-                Err(e) => eprintln!("{e}"),
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
             },
-            None => eprintln!("echospot restore <backup.tar.gz>"),
+            None => {
+                eprintln!("echospot restore <backup.tar.gz>");
+                std::process::exit(2);
+            }
         },
     }
 }
