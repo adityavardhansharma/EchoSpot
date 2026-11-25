@@ -378,30 +378,36 @@ fn small_number(word: &str) -> Option<f64> {
 }
 
 fn add_to_span(span: &mut Span, n: f64, unit: &str) -> bool {
+    // No span of dates is a billion of anything; past that the sums below would overflow.
+    if !(0.0..=1e9).contains(&n) {
+        return false;
+    }
     let secs = |span: &mut Span, each: f64| {
-        span.secs += (n * each).round() as i64;
+        span.secs = span.secs.saturating_add((n * each).round() as i64);
         span.fine = true;
     };
+    let days = |span: &mut Span, d: f64| span.days = span.days.saturating_add(d.round() as i64);
+    let months = |span: &mut Span, m: f64| span.months = span.months.saturating_add(m.round() as i32);
     match unit {
         "s" | "sec" | "secs" | "second" | "seconds" => secs(span, 1.0),
         "m" | "min" | "mins" | "minute" | "minutes" => secs(span, 60.0),
         "h" | "hr" | "hrs" | "hour" | "hours" => secs(span, 3600.0),
         "d" | "day" | "days" => {
-            span.days += n.trunc() as i64;
+            days(span, n.trunc());
             if n.fract() != 0.0 {
-                span.secs += (n.fract() * 86_400.0).round() as i64;
+                span.secs = span.secs.saturating_add((n.fract() * 86_400.0).round() as i64);
                 span.fine = true;
             }
         }
-        "w" | "wk" | "wks" | "week" | "weeks" => span.days += (n * 7.0).round() as i64,
-        "fortnight" | "fortnights" => span.days += (n * 14.0).round() as i64,
+        "w" | "wk" | "wks" | "week" | "weeks" => days(span, n * 7.0),
+        "fortnight" | "fortnights" => days(span, n * 14.0),
         "mo" | "mos" | "month" | "months" => {
-            span.months += n.trunc() as i32;
-            span.days += (n.fract() * 30.44).round() as i64;
+            months(span, n.trunc());
+            days(span, n.fract() * 30.44);
         }
-        "y" | "yr" | "yrs" | "year" | "years" => span.months += (n * 12.0).round() as i32,
-        "decade" | "decades" => span.months += (n * 120.0).round() as i32,
-        "century" | "centuries" => span.months += (n * 1200.0).round() as i32,
+        "y" | "yr" | "yrs" | "year" | "years" => months(span, n * 12.0),
+        "decade" | "decades" => months(span, n * 120.0),
+        "century" | "centuries" => months(span, n * 1200.0),
         _ => return false,
     }
     true
