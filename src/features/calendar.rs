@@ -429,7 +429,12 @@ pub fn refresh(app: &mut App, force: bool) {
         let (mut events, mut error) = (Vec::new(), None);
         for source in &sources {
             match read(source, force) {
-                Ok(text) => events.extend(parse(&text, from, to)),
+                // A feed is someone else's text: one that trips the parser costs its own events,
+                // not the read, which would otherwise never land and leave the screen loading.
+                Ok(text) => match std::panic::catch_unwind(|| parse(&text, from, to)) {
+                    Ok(found) => events.extend(found),
+                    Err(_) => error = Some("A calendar could not be read".into()),
+                },
                 Err(e) => error = Some(e),
             }
         }
