@@ -73,6 +73,16 @@ pub fn resolve(link: &str, query: &str) -> String {
     link.replace("{query}", &encode(query.trim())).replace("{argument}", &encode(query.trim()))
 }
 
+/// A link as typed, made one a browser opens: `github.com/search?q={query}` gets `https://`.
+/// Anything that already names its scheme (`mailto:`, `file://`, an app's own) is left alone.
+fn with_scheme(link: &str) -> String {
+    let named = link.split_once(':').is_some_and(|(scheme, rest)| {
+        !scheme.is_empty() && scheme.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+            && (rest.starts_with("//") || !rest.starts_with(|c: char| c.is_ascii_digit()))
+    });
+    if named || link.is_empty() { link.to_string() } else { format!("https://{link}") }
+}
+
 /// The host of a link: `github.com` for `https://github.com/search?q={query}`.
 pub fn host(link: &str) -> Option<&str> {
     let rest = link.split_once("://").filter(|(scheme, _)| scheme.starts_with("http")).map(|(_, rest)| rest)?;
@@ -161,7 +171,7 @@ pub fn save(app: &mut App, id: Option<String>, tx: &mut Tx) {
     let link = Quicklink {
         id: id.clone().unwrap_or_else(|| util::new_id(|n| app.quicklinks.list.iter().any(|l| l.id == n))),
         name: form.get("name").trim().to_string(),
-        link: form.get("link").trim().to_string(),
+        link: with_scheme(form.get("link").trim()),
         alias: form.get("alias").trim().to_string(),
     };
     match app.quicklinks.list.iter_mut().find(|l| Some(&l.id) == id.as_ref()) {
@@ -171,4 +181,16 @@ pub fn save(app: &mut App, id: Option<String>, tx: &mut Tx) {
     app.quicklinks.save();
     app.pop(tx);
     app.toast("Quicklink Saved", Tone::Success);
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_bare_address_becomes_a_web_link() {
+        assert_eq!(super::with_scheme("github.com/search?q={query}"), "https://github.com/search?q={query}");
+        assert_eq!(super::with_scheme("localhost:8080/x"), "https://localhost:8080/x");
+        assert_eq!(super::with_scheme("https://a.b"), "https://a.b");
+        assert_eq!(super::with_scheme("mailto:me@x.y"), "mailto:me@x.y");
+        assert_eq!(super::with_scheme("obsidian://open?vault=x"), "obsidian://open?vault=x");
+    }
 }
