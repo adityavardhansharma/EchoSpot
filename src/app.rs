@@ -412,7 +412,13 @@ impl App {
 
     /// Called as the palette is summoned: note what it covers, then show fresh rows.
     pub fn will_show(&mut self) {
-        self.prev_window = windows::active();
+        self.prepare();
+        self.follow_backdrop();
+    }
+
+    /// Starts following the screen behind the panel, for whichever material the theme draws.
+    /// Only for a palette that will be seen: a hotkey that launches an app takes no picture.
+    fn follow_backdrop(&mut self) {
         crate::live::own_shadows_off();
         self.has_backdrop = false;
         self.glass.clear();
@@ -427,6 +433,11 @@ impl App {
                 crate::live::start_palette();
             }
         }
+    }
+
+    /// Reads what the rows show fresh, as the palette is summoned or a hotkey runs one of them.
+    fn prepare(&mut self) {
+        self.prev_window = windows::active();
         self.running = windows::clients().into_iter().map(|c| c.class.to_lowercase()).collect();
         self.scripts = features::scripts::load();
         // The theme may have been switched from elsewhere since the last summon.
@@ -852,7 +863,7 @@ impl App {
     /// Returns whether the palette has something to show for it.
     pub fn run_id(&mut self, id: &str, tx: &mut Tx) -> bool {
         self.reset();
-        self.will_show();
+        self.prepare();
         let Some(act) = features::root::primary(self, id) else {
             self.visible = false;
             crate::hud::show("No Such Command", Tone::Danger);
@@ -860,7 +871,9 @@ impl App {
         };
         self.perform(act, tx);
         let showing = self.visible && (self.screens.len() > 1 || self.dialog.is_some() || self.form.is_some());
-        if !showing {
+        if showing {
+            self.follow_backdrop();
+        } else {
             if let Some(toast) = self.toast.take() {
                 crate::hud::show(&toast.text, toast.tone);
             }
