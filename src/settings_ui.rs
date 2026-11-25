@@ -1478,9 +1478,12 @@ fn extensions(ui: &SettingsUi, p: &Palette, scale: f32) -> Vec<El> {
                 .child(text(e.title.clone()).font(type_::ROW_TITLE).color(p.text).truncate())
                 .child(text(format!("{by}{} command{}", e.commands, if e.commands == 1 { "" } else { "s" })).font(NOTE).color(p.text_secondary).truncate()))
             .child(danger_button(ui, p, &format!("uninstall-{id}"), "Uninstall", move |ui, _| {
-                let _ = std::fs::remove_dir_all(crate::ext::extensions_dir().join(&id));
                 ui.extensions.retain(|e| e.id != id);
-                tell_main(|app| app.ext.rescan());
+                // The palette uninstalls it: it stops its commands and forgets its preferences too.
+                let id = id.clone();
+                if let Some(main) = MAIN.get() {
+                    main.update(move |app: &mut App, tx| app.perform(crate::model::Act::Ext(crate::ext::ExtAct::Uninstall(id)), tx));
+                }
             }))
     }).collect();
     if rows.is_empty() {
