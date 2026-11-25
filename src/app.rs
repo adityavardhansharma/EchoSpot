@@ -320,6 +320,7 @@ impl App {
     /// Reads everything kept on disk again: after a restore, or when another process changed it.
     pub fn reload_stores(&mut self) {
         self.settings = crate::settings::Settings::load();
+        crate::settings_ui::sync(self.settings.clone());
         self.snippets = features::snippets::Snippets::load();
         self.quicklinks = features::quicklinks::Quicklinks::load();
         self.bindings.reload();
