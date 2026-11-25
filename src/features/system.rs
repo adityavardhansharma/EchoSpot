@@ -101,10 +101,6 @@ pub fn tint(action: SystemAction) -> Tint {
     }
 }
 
-pub fn command(action: SystemAction) -> &'static SystemCommand {
-    COMMANDS.iter().find(|c| c.action == action).expect("every action has a command")
-}
-
 /// Whether this machine can run the command at all.
 pub fn available(action: SystemAction) -> bool {
     match action {
